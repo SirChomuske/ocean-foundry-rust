@@ -1,0 +1,88 @@
+# id | stage | advanced | kind
+ocean.width | scene | false | int 16..2048 default 256
+ocean.length | scene | false | int 16..2048 default 256
+ocean.placement_y | scene | false | int -64..319 default 62
+ocean.wave_height | water | false | float 0..64 default 8 decimals 1
+ocean.peak_distance | water | false | float 4..512 default 48 decimals 0
+ocean.direction | water | false | float 0..360 default 0 decimals 0
+ocean.irregularity | water | false | float 0..1 default 0.5 decimals 2
+ocean.swell_detail | water | false | float 0..1 default 0.4 decimals 2
+ocean.crest_sharpness | water | false | float 0..1 default 0.4 decimals 2
+ocean.moment | moment | false | float 0..60 default 0 decimals 1
+ocean.seed | water | false | seed default 1
+ocean.build_style | geometry | false | choice [shell,filled] default shell
+ocean.shell_thickness | geometry | false | int 1..16 default 2
+ocean.foundation_colour | blocks | false | choice [white,orange,magenta,light_blue,yellow,lime,pink,gray,light_gray,cyan,purple,blue,brown,green,red,black] default light_blue
+ocean.include_colour_glass | geometry | false | bool default true
+ocean.dark_colour | appearance | false | colour default #1166b0
+ocean.light_colour | appearance | false | colour default #68c7e9
+ocean.daylight | appearance | false | float 0..1 default 1 decimals 2
+ocean.lit_strength | appearance | false | float 0..1 default 0.85 decimals 2
+ocean.depth_influence | appearance | false | float 0..1 default 1 decimals 2
+ocean.clarity | appearance | false | float 0..1 default 0.5 decimals 2
+ocean.depth_reach | appearance | false | float 1..32 default 7 decimals 0
+ocean.foam_amount | appearance | false | float 0..1 default 0.5 decimals 2
+ocean.foam_streaks | appearance | false | float 0..1 default 0 decimals 2
+ocean.foam_colour | appearance | false | colour default #eef4f8
+ocean.shading_strength | appearance | false | float 0..1 default 0.7 decimals 2
+ocean.contrast | appearance | false | float 0..6 default 1.6 decimals 1
+ocean.shade_midpoint | appearance | false | float 0..1 default 0.5 decimals 2
+ocean.light_bearing | appearance | false | float 0..360 default 45 decimals 0
+ocean.light_elevation | appearance | false | float 1..90 default 38 decimals 0
+ocean.ripple_strength | appearance | false | float 0..1 default 0.5 decimals 2
+ocean.shadow_strength | appearance | false | float 0..1 default 0.7 decimals 2
+ocean.shadow_softness | appearance | false | float 0..12 default 2 decimals 1
+ocean.pattern_source | appearance | false | choice [wind,library,spectrum,image] default wind
+ocean.pattern_name | appearance | false | choice [broken_crests,fine_chop,long_ripples,cross_sea,calm_swirls] default broken_crests
+ocean.pattern_spread | appearance | false | float 0..180 default 40 decimals 0
+ocean.pattern_peak | appearance | false | float 1..10 default 3.3 decimals 1
+ocean.pattern_span | appearance | false | float 4..1024 default 64 decimals 0
+ocean.pattern_strength | appearance | false | float 0..3 default 1 decimals 2
+ocean.pattern_rotation | appearance | false | float 0..360 default 0 decimals 0
+ocean.pattern_invert | appearance | false | bool default false
+ocean.pattern_flip_y | appearance | false | choice [auto,opengl,directx] default auto
+ocean.seabed | water | false | bool default false
+ocean.seabed_shallowest | water | false | float 0..64 default 2 decimals 1
+ocean.seabed_slope | water | false | float 0..2 default 0.1 decimals 2
+ocean.seabed_direction | water | false | float 0..360 default 0 decimals 0
+ocean.reflection_strength | appearance | false | float 0..1 default 0.5 decimals 2
+ocean.reflection_auto | appearance | false | bool default true
+ocean.reflection_colour | appearance | false | colour default #d9ecf5
+ocean.reflection_softness | appearance | false | float 0..1 default 0.15 decimals 2
+ocean.view_bearing | appearance | false | float 0..360 default 225 decimals 0
+ocean.view_elevation | appearance | false | float 1..90 default 35 decimals 0
+ocean.glass_layers | geometry | false | int 0..3 default 3
+ocean.max_solids | blocks | false | int 1..32 default 8
+ocean.max_glass | blocks | false | int 1..16 default 4
+ocean.dither_mode | blocks | false | choice [off,patches,bayer,noise,diffusion] default patches
+ocean.dither_strength | blocks | false | float 0..1 default 0.6 decimals 2
+ocean.dither_grain | blocks | false | int 1..4 default 1
+ocean.dither_seed | blocks | false | seed default 1
+ocean.creative_blocks | blocks | false | bool default false
+ocean.swell_height | water | false | float 0..32 default 0 decimals 1
+ocean.swell_length | water | false | float 16..1024 default 160 decimals 0
+ocean.swell_direction | water | false | float 0..360 default 30 decimals 0
+ocean.metres_per_block | scene | false | float 0.25..4 default 1 decimals 2
+ocean.flow_speed | scene | false | float 0..10 default 0 decimals 1
+ocean.flow_direction | scene | false | float 0..360 default 0 decimals 0
+lava.width | scene | false | int 16..2048 default 128
+lava.length | scene | false | int 16..2048 default 128
+lava.placement_y | scene | false | int -64..319 default 32
+lava.pattern | water | false | choice [plates,ropes,pools] default plates
+lava.map_scale | water | false | float 4..512 default 64 decimals 0
+lava.rotation | water | false | float 0..360 default 0 decimals 0
+lava.seed | water | false | seed default 1
+lava.flow_distortion | water | false | float 0..1 default 0.3 decimals 2
+lava.invert | water | false | bool default false
+lava.crust_colour | appearance | false | colour default #2b2422
+lava.molten_colour | appearance | false | colour default #e8501a
+lava.hot_colour | appearance | false | colour default #ffd24a
+lava.crust_coverage | appearance | false | float 0..1 default 0.7 decimals 2
+lava.glow | appearance | false | float 0..1 default 0.6 decimals 2
+lava.interpretation | appearance | false | choice [slope,fissures] default fissures
+lava.relief | geometry | false | int 0..8 default 2
+lava.foundation_colour | blocks | false | choice [white,orange,magenta,light_blue,yellow,lime,pink,gray,light_gray,cyan,purple,blue,brown,green,red,black] default black
+lava.glass_layers | geometry | false | int 0..3 default 0
+lava.max_solids | blocks | false | int 1..32 default 10
+lava.max_glass | blocks | false | int 1..16 default 4
+lava.dither_strength | blocks | false | float 0..1 default 0.6 decimals 2

@@ -1,0 +1,21 @@
+[package]
+name = "of-cli"
+version = "0.1.0"
+edition = "2024"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
+of-core = { version = "0.1.0", path = "../of-core" }
+of-formats = { version = "0.1.0", path = "../of-formats" }
+of-ocean = { version = "0.1.0", path = "../of-ocean" }
+of-gpu = { version = "0.1.0", path = "../of-gpu" }
+serde_json = "1.0.154"
+zip = { version = "9.5.0", default-features = false, features = ["deflate"] }
+
+[features]
+# The development build: lava (on hold) and the coast and cliffs lands.
+# The package is built without them.
+dev = ["of-ocean/dev", "of-core/dev"]

@@ -1,0 +1,394 @@
+Ocean Foundry - generator tuning (development build)
+====================================================
+
+ocean-tuning.json, in this folder, holds the internal numbers of the ocean
+generator. They are not ordinary settings: they are the knobs of the method
+itself, kept in a file while the method is still being worked on, so it can
+be adjusted without a new build of the program.
+
+How to use it
+-------------
+  1. Open ocean-tuning.json in any text editor (the app has a button for it:
+     Advanced > Generator tuning > Open tuning file).
+  2. Change a number and save the file.
+  3. With "Live" on, the app bakes again by itself within a second.
+     Otherwise press Bake.
+
+  - Delete the file (or press "Restore defaults") to get the defaults back.
+    "Restore defaults" keeps the numbers it replaces in
+    ocean-tuning.previous.json.
+  - A part you leave out of the file uses its default. A file holding only
+    { "_version": 4, "reflection": { "cliff": 0 } } changes that one number.
+  - If the file cannot be read (a missing comma, a misspelt name), the app
+    says what is wrong and on which line, and keeps the previous build.
+  - Names must stay exactly as they are; only change the values.
+  - The "_about" line is a note and is ignored.
+  - "_version" says which method the numbers were written for (now 4). When
+    the method changes so much that old numbers no longer mean the same, the
+    app sets an older file aside as ocean-tuning.previous.json, writes a
+    fresh one and says so.
+
+Lengths are in blocks unless they say otherwise. "Main wave" means a wave as
+long as the "Peak distance" setting.
+
+
+waves - the open sea
+--------------------
+The sea is a wave spectrum (JONSWAP) sampled as many small waves and added up.
+
+components          How many waves the sea is the sum of. More is smoother
+                    and never repeats, and costs bake time.
+peak_enhancement    How sharply the spectrum peaks at the main waves: 1 is a
+                    fully developed sea, 3.3 the measured average, 7 very
+                    peaked (a clean swell).
+narrowing_at_calm   Extra narrowing of the peak when "Irregularity" is 0, so
+                    a regular swell is nearly one wavelength.
+spread_at_calm      How narrowly the wave directions are bunched at
+spread_at_wild      Irregularity 0 and at 1. Larger is narrower: 300 gives
+                    long straight crests, 4 a confused sea.
+tail_from           The short waves "Swell detail" adds start at this
+                    multiple of the main wave frequency.
+tail_energy         Share of the sea's energy in them at full Swell detail.
+tail_components     Share of the components spent on them.
+shortest_length     Waves shorter than this cannot be built from blocks and
+                    are left out.
+height_in_deviations  What "Wave height" measures: 4 is the average of the
+                    highest third of the waves, 5.1 of the highest tenth.
+                    Smaller makes a taller sea for the same setting.
+tone_smoothing      The colour of the water follows the sea with its short
+tone_smoothing_least  waves smoothed away, so it shows the swell and not
+                    every wavelet (this is what keeps the colour from looking
+                    grainy). The first is a share of the peak distance, the
+                    second the least smoothing in blocks. 0 colours every
+                    wavelet.
+chop_most           How far full "Crest sharpness" pulls the water toward the
+                    crests: 1 is a true trochoid.
+cusp_limit          Sharpening stops before the steepest crests fold over.
+
+
+near_land - what land does to the waves (only with land)
+--------------------------------------------------------
+breaker_ratio       The tallest wave the water can carry, as a share of its
+                    depth. Measured values run from 0.6 to 0.8.
+height_at_shore     Share of their height waves keep at the waterline.
+depth_smoothing     Blocks over which the depth is averaged before the waves
+                    feel it.
+least_depth         Waves are slowed as if the water were never shallower.
+slowest             The most the crests can bunch up as they slow: 3 lets
+                    them come three times closer together.
+shelter_rays        Shelter behind land is found by looking upwind along this
+shelter_fan         many lines, fanned out by this many degrees to each side,
+shelter_reach       up to this many main waves away.
+bend_share          Share of the waves that gets round corners into shelter.
+shelter_floor       Share of their height long waves keep in full shelter.
+chop_regrow         Short waves grow back behind land over this many blocks.
+
+
+reflection - waves thrown back by the shore (only with land)
+------------------------------------------------------------
+The shore is read from the shape of the land: a low sandy slope with shallow
+water in front is a beach, land that stands steep and tall from the water is
+a cliff, the rest is rocky shore. In front of a shore that throws waves back,
+the sea is the waves arriving and the same waves leaving, crossing.
+
+cliff               Share of a wave's height a cliff throws back.
+rocky               The same for a rocky shore.
+beach               The same for a beach (waves break there and are spent).
+reach               How far out the returning waves are seen, in main waves:
+                    at this distance about a third is left.
+
+
+ripples - fine ripples that exist only as shading
+-------------------------------------------------
+slope               Slope the ripples add at full "Ripple shading".
+size                Their size in blocks: the way the waves run (short), and
+                    along the crests (longer). They are small waves of the
+                    same wind, so they lie the same way as the swell.
+sideways            How much of that slope they also have along the crests.
+pattern_share       How much of that slope a library or image ripple pattern
+                    gives at "Pattern strength" 1. Default 0.4.
+seabed_break_depth  With the imagined sea floor, waves break more readily
+                    in water shallower than this many wave heights.
+                    Default 1.3.
+
+
+shore_foam - white water where the sea meets land
+-------------------------------------------------
+sand_reach          How many blocks out from a beach the foam reaches...
+sand_strength       ...and how strong it is there (0 to 1).
+rock_reach          The same on a rocky shore, where it is most broken up.
+rock_strength
+cliff_reach         The same at the foot of a cliff.
+cliff_strength
+height_sway         How much the height of the arriving waves widens the
+                    foam: at 0.4 from 0.6 times in a calm to 1.4 in a storm.
+channel_share       Share of the foam left on the banks of a river channel.
+sheltered           Share of the foam a completely sheltered shore keeps.
+patch_size          Size of the patches the foam breaks into.
+fall_reach          White water where a waterfall lands in the sea: blocks
+fall_reach_most     it reaches for each block the water falls, the most it
+fall_strength       reaches, and how white it is at the foot of the fall.
+
+
+outflow - a river running out into the sea
+------------------------------------------
+Waves meeting a river's current are slowed, stand taller and closer together,
+and the shortest are stopped; the river's water shows as a lighter plume.
+
+speed               How fast the water leaves a river mouth, as a share of
+speed_for_length    the speed of waves this many blocks long. 0: rivers do
+                    nothing to the waves.
+spread              How quickly the outflow widens: blocks to each side for
+                    every block it travels.
+reach               It fades away over this many widths of its mouth.
+gain_most           The most a wave grows running against it.
+fall_share          Share of that speed the water keeps below a waterfall.
+plume_tint          How much the river's water lightens the sea it enters.
+
+
+flow - a current running past land ("Current speed" above 0, with land)
+-----------------------------------------------------------------------
+The current is the same everywhere, so open water shows nothing of it. Land
+in its way leaves slack water behind it, has water piled against the face
+that meets the current, and starts a wake of standing waves. Heights here
+are shares of the head of the current: its speed squared over twice gravity,
+in blocks (so it grows with "Current speed" and with smaller blocks).
+
+slack_most          Share of the current that is lost right behind land.
+slack_spread        How quickly the slack water mixes with the current at
+                    its sides, 0 to 0.33. More closes the slack sooner.
+slack_widths        The current is back about this many widths of the land
+                    behind it: a wide obstacle leaves a long wake.
+pile_reach          How far in front of land the water is piled up, blocks.
+pile_height         How high it is piled against the land, in heads.
+lee_drop            How far it is drawn down behind the land, in heads.
+wave_height         Height of the standing waves behind land, in heads.
+divergent           Height of the crests that fan out to the sides, against
+                    the crests that lie across the current.
+wave_reach          The standing waves are lost in the sea over about this
+                    many distances between their crests. That distance grows
+                    with the square of the speed, so a faster current leaves
+                    a longer wake.
+sources             The shore is gathered into at most this many places
+                    that each start a wake. More follows the shape of the
+                    land more closely and costs bake time.
+shortest            Standing waves shorter than the first number of blocks
+                    are left out; from the second they have full height.
+lift_most           The water is never lifted or lowered by more than this
+                    many heads.
+calm                How much of their height short waves lose in slack water.
+foam                How much white water the current leaves where it strikes
+                    land and in the slack water behind it.
+foam_life           How many seconds foam lasts. It is carried along
+                    meanwhile, so it reaches as far as the current runs in
+                    this time: farther than the waves.
+foam_streak         Length and width of the streaks that foam is drawn into,
+                    in blocks.
+foam_from           A current slower than this many metres a second leaves
+                    no foam; at three times this it leaves all of it.
+
+
+whitecaps - where waves break, and the foam they leave
+------------------------------------------------------
+breaking_steepness  A crest breaks where the water is this steep. Seas built
+                    from blocks are steeper than real ones, so this is above
+                    the 0.3 to 0.44 of real waves.
+most_breaking       However steep the sea, no more than this share of it
+                    breaks at one moment. With the foam left behind, about
+                    four times as much shows white.
+softness            Range of steepness over which breaking sets in.
+short_wave_share    How much short waves count toward the steepness. At 1
+                    every ripple breaks, at 0 only the main waves.
+foam_amount_sway    How far "Foam amount" moves the threshold.
+trail_time          How long foam lasts, in main wave periods.
+trail_samples       Past moments looked at to find that foam. More is
+                    smoother and costs bake time.
+trail_strength      How white a passing breaker leaves the water behind it.
+trail_most          Foam left behind is never a solid sheet: at most this
+                    share of its blocks turn white.
+surf_ease           How much more easily waves break where the water is too
+                    shallow for them.
+
+
+spent_foam - extra white water on tall waves ("Storm foam")
+-----------------------------------------------------------
+Nothing here does anything while "Storm foam" is 0, which is the standard.
+cover_per_height    How much of the sea is white in all, by the height of
+cover_power         the waves: cover_per_height times the height to the
+cover_most          power cover_power, never above cover_most. The standard
+                    numbers follow the whitecap cover measured at sea: 1% at
+                    2.5 m, 6% at 7 m, 17% at 13 m, with "Foam amount" and
+                    "Storm foam" both at 0.5.
+breaking_share      Share of that cover that is crests breaking right now.
+                    The rest is foam they left behind.
+steepness_floor     Waves less steep than this never break, however large
+                    the sea.
+life                How long the lace lasts, and how long the streaks last,
+                    in main wave periods.
+samples             Past moments looked at for each. More is smoother and
+                    costs bake time.
+step                The foam left is worked out every this many blocks and
+                    filled in between.
+lace_share          Share of the foam left that lies as lace; the rest is
+                    streaks.
+lace_size           Size of the meshes of the lace along the waves' path and
+                    across it, in blocks.
+lace_width          How wide the threads of the lace are (0 to 1).
+lace_from           How thin foam may be and still show as threads (0 to 1).
+streak_size         Length and width of the streaks, in blocks.
+streak_width        How gradually the streaks fill in as foam thickens.
+streak_from         How thin foam may be and still show as streaks (0 to 1).
+streak_drawn        How far along the wind foam is drawn out, in blocks.
+streak_waver        How far the streaks waver from side to side, in blocks.
+streak_even         How evenly the streaks lie over the sea: 0 only where
+                    waves broke lately, 1 the same everywhere.
+most                The most white this foam can be, as a share of
+                    colour.foam_most.
+edge                How gradually a block turns white.
+gain_most           The foam left is never multiplied up by more than this
+                    to reach the cover, so a sea that hardly breaks stays
+                    clean.
+
+
+colour
+------
+foam_white          No longer read. The colour of white water is the
+                    "Foam colour" setting in the app.
+foam_gain           How strongly "Foam amount" turns water white.
+foam_most           The most white allowed (1 = pure foam colour).
+foam_weight         Extra say white water gets when the block types are
+                    chosen.
+
+How the colour of a column is found. The water runs between two chosen
+colours, the "Dark colour" and the "Light colour", and every column has a
+tone between them: 0 is the dark colour, 2 the light colour. Level water in
+full sun is at 1, half way (with "Level water" at one half); with less
+"Sunlight" everything moves toward the dark colour. Either colour may be
+anything, black included: nothing here keeps the sea from going black if
+that is what is chosen. Two things move the tone, and "Wave shading" scales
+both:
+
+slope_light         The direction of the light, which leads: a face turned to
+                    the sun is lighter, one turned away darker. Raise it for
+                    more relief; at 0 the direction of the sun no longer
+                    shades the waves.
+crest_light         The thickness of the water, which supports: light comes
+                    through the thin water of a crest, a trough is deep.
+                    Raise it for paler crests and darker troughs wherever
+                    they face. Too much and the colour only shows the height.
+crest_span          The height above the middle of the swell at which a crest
+                    counts as a full one: so many times the usual rise and
+                    fall of the sea in hand, and never less than so many
+                    blocks (so a nearly flat sea is nearly one colour).
+tone_reach          How far the tone can go: the darkest face falls to this
+                    share of level water; the lightest rises this far above.
+                    Raise the second for sunlit faces nearer the light colour.
+patch_tone          The wind does not ruffle the sea evenly: how much darker
+patch_size          and lighter broad patches are, and their size in blocks
+                    along the wind and across it.
+sky_shade           Without sun (overcast, or in shadow) the light comes from
+sky_lift            the whole sky: crests stand open to it, troughs less.
+                    sky_shade is how strong that is, sky_lift how quickly it
+                    changes with height.
+bed_tint            How strongly the sea floor tints shallow water at full
+                    "Water clarity".
+darkest             The share of light left at "Daylight" 0. At 0 the water
+                    is black there; raise it (0.55, say) to keep some light
+                    however low "Daylight" is set.
+white_dims          How much of that darkening foam and reflections take.
+
+Reflections lie over the water's colour as a layer of their own.
+
+reflection_white    With "Reflections take the light colour" on, reflections
+                    are the light colour made paler: this far from it toward
+                    white. 0: they are the light colour itself.
+reflection_tint     How much of the colour left after that they keep. 1: all
+                    of it. 0: a grey as pale as reflection_white makes. With
+                    the default colours the two numbers give #d9ecf5, the
+                    pale sky the reflections had before.
+glint_share         Strength of the glint of the sun, and of the sheen of the
+sheen_share         sky on faces seen at a low angle.
+glint_spread        How far a slope may be from the one that mirrors the sun
+                    and still glint: at "Glint spread" 0, and at 1. Fine
+                    ripples break a narrow glint into sparkles.
+sky_ratio           How bright the sky is against the light from within the
+                    water; sets how quickly the sheen grows at low angles.
+sheen_deepen        How much a face turned toward the onlooker may deepen
+                    below the colour of level water.
+bright_depth        With two bright colours the sea has little room to go
+bright_from         darker and looks pale. Faces turned from the sun then
+                    go this much darker and more colourful than the dark
+                    colour itself. bright_from is the lightness of the dark
+                    colour (0 black, 1 white) at which this starts and at
+                    which it is in full. 0: never.
+
+Choosing the blocks.
+
+hue_care            How much more a wrong hue counts than a wrong lightness
+                    when a block is matched to a colour.
+washed_care         How much more again it counts when the blocks have less
+                    colour than the water was given: grey blocks under glass
+                    look washed out. 0: only the nearness counts.
+care_from           hue_care and washed_care count in full only for water
+                    with at least the second of these as its strength of
+                    colour (0 grey, a clear sea blue about 0.1), and not at
+                    all below the first: grey storm water has no hue to
+                    keep, and there the nearest blocks are simply the
+                    nearest.
+texture_most        The most uneven a block's face may be to be used, as it
+                    shows through the glass over it. Higher lets in more
+                    textured blocks.
+glass_apart         How much it counts against a pair of blocks that the
+                    glass is of another colour than the two look together
+                    from above. Blue glass over green looks teal on the map
+                    and blue along every step in the waves. 0: only the look
+                    from above counts.
+block_gain          A further block type is taken only if it improves the
+                    match by at least this share.
+dither_reach        Dithering mixes the two nearest tones in use; how far
+dither_most         between them it reaches at full "Dithering", and the
+                    largest step in colour it will bridge.
+dither_patches      A pattern that changes from block to block looks grainy.
+dither_patch_size   dither_patches is the share of the mixing done instead in
+                    patches a few blocks across, drawn out along the crests;
+                    dither_patch_size is their length and width in blocks.
+                    0: the fine block-by-block pattern only.
+lone_blocks         0: a block whose colour none of the four beside it share
+                    takes the nearest colour among theirs, so no single
+                    blocks stand out. 1: lone blocks are kept. Foam is a
+                    scatter of white blocks and is never touched.
+layer_blend         With two or three layers of glass, a border between two
+layer_reach         block colours is blended through the layers: within
+                    layer_reach blocks of it each layer changes colour along
+                    a line of its own, so one hard border becomes several
+                    faint ones. Open water keeps one clean colour.
+                    layer_blend 0: off; the layers of a column may then
+                    simply differ in colour wherever that matches better.
+layer_smooth        How far, in blocks, the colours are softened before the
+                    middle and the top layer are chosen. The top layer runs
+                    smoothest.
+layer_dither        How strongly the lowest, the middle and the top layer
+                    are dithered along a border, as a multiple of
+                    "Dithering". The glass above softens the pattern, so
+                    the lowest layer takes the most and the top none.
+
+Foam.
+
+foam_grain          Foam is a scatter of white blocks. Thresholds run from
+foam_edge           foam_grain to 1; foam_edge is how gradually a block
+                    turns white.
+foam_streaks        Share of the scatter that follows streaks drawn out along
+foam_streak_size    the waves' path, and their length and width in blocks.
+aerated_tint        How much the churned water around foam is lightened.
+shade_slope         The steepness of sea the shading is laid out for (the
+                    typical slope of its swell: about 0.06 in a calm, 0.27 in
+                    a moderate sea). In a steeper sea the shading is eased by
+                    as much, so a storm does not become a hard pattern of the
+                    darkest and the lightest blocks. 0: never eased.
+
+
+Not in this file yet
+--------------------
+The numbers by which the shore is read (how steep and tall a cliff is, how
+low a beach) and by which a river builds its delta are still fixed in the
+program (survey.rs and terrain.rs). Say so if you want them here.

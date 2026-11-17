@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["crates/of-core", "crates/of-gpu", "crates/of-cli", "crates/of-app", "crates/of-formats", "crates/of-ocean"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["sirchocoo"]
+repository = "https://github.com/SirChomuske/ocean-foundry-classic"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+strip = true
+
+[profile.dev]
+opt-level = 1

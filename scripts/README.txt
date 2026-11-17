@@ -27,7 +27,7 @@ top right of the window.
 
 Ocean Foundry was created by sirchocoo.
 Released under the MIT license; see LICENSE for the full text.
-Project page: https://github.com/SirChomuske/ocean-foundry-classic
+Project page: https://github.com/SirChomuske/ocean-foundry-rust
 
 Ocean Foundry 海洋铸造厂
 ======================
@@ -48,4 +48,4 @@ Ocean Foundry 海洋铸造厂
 
 Ocean Foundry 由 sirchocoo 制作。
 以 MIT 许可证发布；完整文本见 LICENSE。
-项目主页：https://github.com/SirChomuske/ocean-foundry-classic
+项目主页：https://github.com/SirChomuske/ocean-foundry-rust

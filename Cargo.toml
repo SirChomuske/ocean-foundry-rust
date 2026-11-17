@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["sirchocoo"]
-repository = "https://github.com/SirChomuske/ocean-foundry-classic"
+repository = "https://github.com/SirChomuske/ocean-foundry-rust"
 
 [profile.release]
 opt-level = 3

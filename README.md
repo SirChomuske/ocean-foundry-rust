@@ -11,11 +11,11 @@ Ocean Foundry 是一个便携、离线的 Windows 桌面应用。调好一片水
 *图中的教堂建筑由 B 站 UP 主 [伯亚](https://space.bilibili.com/399577290) 制作，导入 Ocean Foundry 作为预览场景。*
 *Cathedral build by [伯亚](https://space.bilibili.com/399577290) on Bilibili, imported into Ocean Foundry for this preview.*
 
-> **版本说明：** 这个仓库是 **Ocean Foundry 的 Rust 重写版 v0.1.0**（Ocean Foundry Classic），也是当前较新的版本。早先的 Python v1.3 版本在 [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry)。
+> **版本说明：** 这个仓库是 **Ocean Foundry 的 Rust 重写版 v0.1.0**，也是当前较新的版本。早先的 Python v1.3 版本在 [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry)。
 
 ## ⬇️ 下载
 
-从 [Releases](https://github.com/SirChomuske/ocean-foundry-classic/releases) 下载最新版：
+从 [Releases](https://github.com/SirChomuske/ocean-foundry-rust/releases) 下载最新版：
 
 | 文件 | 内容 |
 |---|---|
@@ -73,8 +73,8 @@ Ocean Foundry 是一个便携、离线的 Windows 桌面应用。调好一片水
 需要较新的稳定版 Rust（edition 2024）和 Windows 上的 PowerShell。
 
 ```powershell
-git clone https://github.com/SirChomuske/ocean-foundry-classic.git
-cd ocean-foundry-classic
+git clone https://github.com/SirChomuske/ocean-foundry-rust.git
+cd ocean-foundry-rust
 
 cargo test --workspace --release
 pwsh -NoProfile -File scripts/package.ps1
@@ -131,13 +131,12 @@ water, watch the simulation become a block build, freeze the moment you like,
 and export it as a Litematica, WorldEdit/Sponge or Axiom file.
 
 > **Version note:** this repository contains the **v0.1.0 Rust rewrite**
-> (Ocean Foundry Classic), the current newer line. The earlier Python v1.3
-> release lives at [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry).
+> the current newer line. The earlier Python v1.3 release lives at [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry).
 
 ## ⬇️ Download
 
 Grab the latest release from
-[Releases](https://github.com/SirChomuske/ocean-foundry-classic/releases).
+[Releases](https://github.com/SirChomuske/ocean-foundry-rust/releases).
 
 | File | What is inside |
 |---|---|
@@ -212,8 +211,8 @@ You need a recent stable Rust toolchain (edition 2024) and PowerShell on
 Windows.
 
 ```powershell
-git clone https://github.com/SirChomuske/ocean-foundry-classic.git
-cd ocean-foundry-classic
+git clone https://github.com/SirChomuske/ocean-foundry-rust.git
+cd ocean-foundry-rust
 
 cargo test --workspace --release
 pwsh -NoProfile -File scripts/package.ps1

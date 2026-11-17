@@ -11,7 +11,7 @@ Ocean Foundry 是一个便携、离线的 Windows 桌面应用。调好一片水
 *图中的教堂建筑由 B 站 UP 主 [伯亚](https://space.bilibili.com/399577290) 制作，导入 Ocean Foundry 作为预览场景。*
 *Cathedral build by [伯亚](https://space.bilibili.com/399577290) on Bilibili, imported into Ocean Foundry for this preview.*
 
-> **版本说明：** 这个仓库是 **Ocean Foundry 的 Rust 重写版 v0.1.0**，也是当前较新的版本。早先的 Python v1.3 版本在 [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry)。
+> **版本说明：** 这个仓库是 **Ocean Foundry 的 v0.1.0 Rust 版**，也是当前最新的版本。更早的 Python v1.3 版本在 [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry)。
 
 ## ⬇️ 下载
 
@@ -130,8 +130,7 @@ Ocean Foundry is a portable, offline Windows desktop app. Shape a stretch of
 water, watch the simulation become a block build, freeze the moment you like,
 and export it as a Litematica, WorldEdit/Sponge or Axiom file.
 
-> **Version note:** this repository contains the **v0.1.0 Rust rewrite**
-> the current newer line. The earlier Python v1.3 release lives at [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry).
+> **Version note:** this repository contains the **v0.1.0 Rust build**, the current version. The earlier Python v1.3 release lives at [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry).
 
 ## ⬇️ Download
 

@@ -22,8 +22,12 @@ pub const TUNING_BACKUP: &str = "ocean-tuning.previous.json";
 /// they travel (wander), the sea a shore throws back reaches a quarter of a
 /// peak length and is spread out, the current runs faster where two shores
 /// squeeze it and draws its foam out, and a fast current keeps more of the
-/// foam it drags.
-pub const TUNING_VERSION: u32 = 5;
+/// foam it drags. 6: thick foam is cut into plates with cracks of open water
+/// between them, so a wake reads as white lace rather than one sheet of paint.
+/// 7: the wake keeps closer to what made it — its wedge fades at the sides
+/// and the crests that fan out are lost sooner — and the water is thrown up
+/// against a face the current strikes rather than only whitened on it.
+pub const TUNING_VERSION: u32 = 7;
 
 /// The open sea: a wave spectrum sampled as many small waves.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -310,6 +314,14 @@ pub struct FlowTuning {
     /// The standing waves are lost in the sea over about this many
     /// distances between their crests.
     pub wave_reach: f64,
+    /// How gradually the wake fades at the sides of the wedge it keeps to,
+    /// as a share of the wedge's half width. Wide melts the wake into the
+    /// sea; narrow ends it on a line.
+    pub wedge_soft: f64,
+    /// The crests that fan out to the sides are lost over about this many
+    /// distances between crests. They lie longer across the sea than the
+    /// crests across the current, so they fade sooner.
+    pub fan_reach: f64,
     /// The shore is gathered into at most this many places that each start
     /// a wake. More follows the shape of the land more closely and costs
     /// bake time.
@@ -342,6 +354,12 @@ pub struct FlowTuning {
     /// sheet painted on top of that. The trail it drags keeps its own cap:
     /// that white wash is how a fast current reads.
     pub fast_cap: f64,
+    /// How high the water is thrown up the face of what it strikes, in
+    /// blocks, at the head of the current. It climbs the face and comes away
+    /// in spouts above it, so a wall is met by water rather than only painted
+    /// white, and the height falls off as the current slows. 0 leaves the
+    /// surface flat as before.
+    pub splash_height: f64,
     /// How much faster the current runs where it is squeezed between two
     /// shores, as a share of its open speed. The same water through a
     /// smaller gap goes faster; 0 leaves the current even everywhere.
@@ -379,7 +397,9 @@ impl Default for FlowTuning {
             lee_drop: 0.5,
             wave_height: 0.9,
             divergent: 0.8,
-            wave_reach: 4.0,
+            wave_reach: 2.2,
+            wedge_soft: 0.7,
+            fan_reach: 0.9,
             sources: 48,
             shortest: [10.0, 24.0],
             lift_most: 2.0,
@@ -390,12 +410,13 @@ impl Default for FlowTuning {
             foam_from: 1.0,
             impact_bonus: 0.2,
             fast_cap: 0.15,
+            splash_height: 6.0,
             squeeze: 1.0,
             squeeze_reach: 8.0,
-            foam_stretch: 0.6,
-        mix: 0.5,
-        mix_spread: 3.0,
-        squeeze_lift: 0.5,
+                foam_stretch: 0.6,
+            mix: 0.5,
+            mix_spread: 3.0,
+            squeeze_lift: 0.5,
             stagnation: 0.5,
         }
     }
@@ -570,6 +591,12 @@ pub struct ColourTuning {
     /// `foam_grain` to 1; `foam_edge` is how gradually a block turns white.
     pub foam_grain: f64,
     pub foam_edge: f64,
+    /// How strongly thick foam is cut into plates by cracks of open water
+    /// between them: 0 leaves one sheet of white, 1 cuts through to the sea.
+    /// Thin foam at the edges is left as it is.
+    pub foam_net: f64,
+    /// The size of one plate along the current and across it, in blocks.
+    pub foam_net_size: [f64; 2],
     /// Share of those thresholds that follows streaks drawn out along the
     /// waves' path rather than changing from block to block, and the length
     /// and width of the streaks in blocks.
@@ -659,6 +686,8 @@ impl Default for ColourTuning {
             foam_weight: 4.0,
             foam_grain: 0.2,
             foam_edge: 0.1,
+            foam_net: 0.85,
+            foam_net_size: [13.0, 7.0],
             foam_streaks: 0.8,
             foam_streak_size: [7.0, 1.6],
             aerated_tint: 0.4,

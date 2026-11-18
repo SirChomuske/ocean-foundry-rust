@@ -184,6 +184,13 @@ wave_reach          The standing waves are lost in the sea over about this
                     many distances between their crests. That distance grows
                     with the square of the speed, so a faster current leaves
                     a longer wake.
+wedge_soft          How gradually the wake fades at the sides of the wedge
+                    it keeps to, as a share of the wedge's half width. Wide
+                    melts the wake into the sea; narrow ends it on a line.
+fan_reach           The crests that fan out to the sides are lost over about
+                    this many distances between crests. They lie longer
+                    across the sea than the crests across the current, so
+                    they fade sooner.
 sources             The shore is gathered into at most this many places
                     that each start a wake. More follows the shape of the
                     land more closely and costs bake time.
@@ -211,6 +218,11 @@ fast_cap            How much white water a fast current is rid of at the
                     so those faces must not read as a sheet painted on top of
                     that. The trail it drags keeps its own cap: that white
                     wash is how a fast current reads.
+splash_height       How high the water is thrown up the face of what it
+                    strikes, in blocks, at the head of the current. It climbs
+                    the wall where the water meets it and comes away in
+                    spouts above it, falling off as the current slows; 0
+                    leaves the surface flat, with only the white water on it.
 squeeze             How much faster the current runs where two shores press
                     it together, as a share of its open speed. The same water
                     through a smaller gap goes faster; 0 leaves it even.
@@ -303,6 +315,14 @@ foam_gain           How strongly "Foam amount" turns water white.
 foam_most           The most white allowed (1 = pure foam colour).
 foam_weight         Extra say white water gets when the block types are
                     chosen.
+foam_net            How strongly thick white water is torn into lanes with
+                    pale churned water between them (0: one sheet of white, 1:
+                    lanes as wide as the foam). Foam still fresh at the land
+                    that threw it stays solid; the lanes appear as the current
+                    draws it downstream. Thin foam is left as it is.
+foam_net_size       The size of one plate along the current and across it, in
+                    blocks. Long plates are drawn out as a current draws its
+                    foam.
 
 How the colour of a column is found. The water runs between two chosen
 colours, the "Dark colour" and the "Light colour", and every column has a

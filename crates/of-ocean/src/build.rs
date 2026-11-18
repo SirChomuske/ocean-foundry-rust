@@ -230,6 +230,39 @@ pub fn bake_with(
                     level += (splash * 2.5).round() as i32;
                 }
             }
+            // A current striking a wall throws its water up the face: the
+            // sea climbs where it meets the wall, whitens as it climbs, and
+            // drops back as the current slows, so a wall is met by water and
+            // not only painted white.
+            if let Some(f) = flow {
+                let hit = f.strike(x, z);
+                if hit > 0.05 && s.look.spray > 0.0 {
+                    let (wx, wz) = world(x, z);
+                    let grain =
+                        0.5 + 0.5 * crate::noise::fbm(wx / 4.0, wz / 4.0, s.waves.seed ^ 0x5EB2, 2);
+                    let fast = smoothstep(
+                        tuning.flow.foam_from,
+                        3.0 * tuning.flow.foam_from,
+                        f.speed,
+                    );
+                    let thrown = (hit * fast * grain).clamp(0.0, 1.0);
+                    if thrown > 0.0 {
+                        let climb = (thrown * tuning.flow.splash_height.max(0.0)).round() as i32;
+                        level += climb;
+                        splash = splash.max((s.look.spray.clamp(0.0, 1.0) * thrown).min(1.0));
+                        // Now and then a spout leaps clear of the rest: a
+                        // column of white water thrown a few blocks above
+                        // the climbing surface, gone as soon as it is thrown.
+                        let spout =
+                            0.5 + 0.5 * crate::noise::fbm(wx / 2.5, wz / 2.5, s.waves.seed ^ 0x5EB3, 2);
+                        let leap = ((thrown * spout - 0.35).max(0.0) * 9.0).round() as i32;
+                        if leap > 0 {
+                            level += leap.min(5);
+                            splash = 1.0;
+                        }
+                    }
+                }
+            }
             spray[i] = splash as f32;
             // Under an arch the water and its glass stay clear of the rock.
             if let Some((lowest, _)) = terrain.and_then(|t| t.roof(x, z)) {
@@ -1110,6 +1143,33 @@ pub fn bake_with(
                 let leaping = spray[i] as f64;
                 if leaping > 0.12 {
                     white = white.max(paint.foam_most.clamp(0.0, 1.0) * ((leaping - 0.12) / 0.88).powi(2));
+                }
+                // Foam thick enough to lie in sheets does not stay one sheet:
+                // a current tears it into lanes drawn out along the flow, with
+                // pale churned water showing between them. The lanes are
+                // several times longer than they are wide and their edges
+                // waver, so a wake reads as foam rather than paint.
+                if white > 0.0 && paint.foam_net > 0.0 {
+                    // Freshly thrown foam lies solid: it is only as it is
+                    // drawn downstream that it tears into lanes.
+                    let fresh = flow.map_or(0.0, |f| f.fresh(x, z));
+                    let drawn_out = smoothstep(0.10, 0.80, 1.0 - fresh);
+                    let cut = paint.foam_net.clamp(0.0, 1.0) * smoothstep(0.40, 0.70, white) * drawn_out;
+                    if cut > 0.0 {
+                        let size = [paint.foam_net_size[0].max(1.0), paint.foam_net_size[1].max(1.0)];
+                        let (u, v) = (along / (3.2 * size[0]), across / size[1]);
+                        let (u, v) = (
+                            u + 0.05 * value(0.7 * u, 2.0 * v, seed ^ 0x6C1A),
+                            v + 0.40 * value(1.3 * u, 0.9 * v, seed ^ 0x7C1A),
+                        );
+                        let lane = 1.0 - smoothstep(0.0, 0.24, cell_edge(u, v, seed ^ 0x8C1A));
+                        // Now and then a lane is broken across its length.
+                        let break_at = 1.0 - smoothstep(0.0, 0.18, cell_edge(0.5 * u, 1.1 * v, seed ^ 0x9C1A));
+                        let gap = lane.max(break_at);
+                        // A gap is not open sea: the water there is churned
+                        // and already paler, and some foam still stirs in it.
+                        white *= 1.0 - cut * gap * 0.72;
+                    }
                 }
                 lab = colour::mix(lab, foam_lab, white as f32);
                 let key = [(lab[0] * 160.0).round() as i16, (lab[1] * 160.0).round() as i16, (lab[2] * 160.0).round() as i16];

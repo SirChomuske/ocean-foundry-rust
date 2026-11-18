@@ -266,6 +266,8 @@ impl Flow {
             let k0 = TAU / apart;
             let near = 0.5 * apart;
             let lost_over = tuning.wave_reach.max(0.1) * apart;
+            let fan_lost_over = tuning.fan_reach.max(0.1) * apart;
+            let soft = tuning.wedge_soft.clamp(0.001, 1.0);
             let divergent = tuning.divergent.max(0.0);
             let (land, sources) = (&land, &sources);
             fill_rows(&mut lift, row, progress, (span.0 + (span.1 - span.0) * 0.2, span.1), &|gz, out| {
@@ -294,7 +296,7 @@ impl Flow {
                         if fading < 0.01 {
                             continue;
                         }
-                        let strength = s.weight * fading * inside.powf(-0.25).min(1.8) * smoothstep(0.0, 0.08, inside);
+                        let strength = s.weight * fading * inside.powf(-0.25).min(1.8) * smoothstep(0.0, soft, inside);
                         // Waves too short to build from blocks are left out.
                         let built = |length: f64| smoothstep(shortest, full_from, length);
                         // The crests across the current.
@@ -307,7 +309,8 @@ impl Flow {
                             let cos = 1.0 / (1.0 + lean * lean).sqrt();
                             let length = apart * cos * cos;
                             if length > shortest {
-                                wave += divergent * built(length) * (k0 * down * (1.0 + aside * lean) / cos - FRAC_PI_4).cos();
+                                let fan = (-reach / fan_lost_over).exp();
+                                wave += divergent * fan * built(length) * (k0 * down * (1.0 + aside * lean) / cos - FRAC_PI_4).cos();
                             }
                         }
                         sum += strength * wave;
@@ -371,6 +374,12 @@ impl Flow {
     /// drawn out downstream. 0 to 1.
     pub fn wake(&self, x: i32, z: i32) -> f64 {
         self.foam * self.trail[self.index(x, z)] as f64
+    }
+
+    /// How fresh the foam a current carries is at a column: 1 where the land
+    /// threw it, falling as it is drawn downstream. 0 to 1.
+    pub fn fresh(&self, x: i32, z: i32) -> f64 {
+        self.trail[self.index(x, z)] as f64
     }
 
     /// How much white water the current leaves at a column: where it

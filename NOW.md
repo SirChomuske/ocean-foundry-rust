@@ -1,4 +1,7 @@
-# NOW — 2026-11-19 05:30 (Pacific/Auckland)
+# NOW — 2026-11-19 07:10 (Pacific/Auckland)
+
+> 交接看 [HANDOFF.md](HANDOFF.md)（当前状态、规则、代码地图、坑）；本文只是这一轮的施工日志。
+> 2026-11-17 的详细旧交接在 [HANDOFF-HISTORY.md](HANDOFF-HISTORY.md)。
 
 ## 用户当前要求（按优先级）
 1. ~~岸影射线扇硬边 / 水面细直划痕~~ — **已修，用户确认**（「the last one from cmp3 looks very good」）。

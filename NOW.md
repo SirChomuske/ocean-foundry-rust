@@ -11,6 +11,19 @@
 - `of-cli roundtrip` 对该文件不可用：35.6M 方块需要 >8 GB（先 4096 失败于 1.94 GB 分配，再 8192 失败于 6.71 GB 分配），是工具上限，不是文件问题。
 - NOW#4 白沫仍按用户「保持现状」不动；2048 验收仍等用户进游戏看。
 
+## 2026-11-19 08:2x 白沫「不该纯白」调研（待用户拍板）
+- 用户：「白沫就算是这个速度也不应该纯白吧，去找几篇论文看一下，或者找现实的游戏做水面效果案例」（附 2048 俯视图）。
+- 文献：Dierssen 2019（Front. Earth Sci. 7:14, doi 10.3389/feart.2019.00014）白沫可见光反照率 ≈ **40%**（不是 1）；Monahan & O'Muircheartaigh 1980（JPO 10:2094）W=2.95e-6·U^3.52 → 10/15/20 m/s ≈ **1.0/3.9/10.5%**；Callaghan 2008（ACP 16:13725 引用）0.8% @10、5.1% @20。我们 26% 白水对应 wave_height=40 格×0.5 m=**20 m 浪**，覆盖率量级自洽。
+- 实拍对照：`target/tmp/ref/adriatic.jpg` 泡沫区（裁剪 250,430,1600,1250）min 通道 p50=**170**/255、≥245 占 **0.0%**、整体蓝灰 (168,179,195)；当前渲染 `wake-map.png` p50=**229**、≥245 占 **4.0%**，且 p50=p90=229（一片死平）。
+- 根因：`crates/of-ocean/src/build.rs` 泡沫只有一行 `lab = colour::mix(lab, foam_lab, white)`，**不参与光照/坡面/阴影**，是平涂层；而调色板里白只有离散几档（snow 249 / quartz 236 / powder 226 / calcite 225 / white_concrete 207），一降就整片变灰。
+- 已试四方案（每种都 2048 全量渲染 + 拼图，见 `target/tmp/foam-montage2-map.png`、`foam-montage2-3d.png`）：
+  - **B** 只换色 `#DBE6EC`（`target/renders/foam-b/`）：均值 203，观感变**淡蓝冰面**，更糟。
+  - **F** 受光 shade .85/form .30（`foam-f/`）：3D 有起伏，俯视图出现**银灰绸缎**。
+  - **E** 受光 .72/.90（`foam-e/`）：明暗更重，像**金属/冰面**，小浪花变灰疙瘩。
+  - **G** 只降白 `foam_most .78`（`foam-g/`）：俯视图几乎无变化，3D 略淡。
+- 结论：**色调微调救不了实心白板**；建议结构改法——保持 26% 覆盖不变，把白沫打散成「沿流向的白色网络 + 蓝孔」并略降峰值白度。
+- 代码实验已 stash：`git stash@{0} "foam lighting experiment (unshipped)"`（TUNING_VERSION 6 + foam_shade/foam_form + lit 混色）；**工作树与 dist 都没动**，等用户选方向再落地。
+
 ## 用户当前要求（按优先级）
 1. ~~岸影射线扇硬边 / 水面细直划痕~~ — **已修，用户确认**（「the last one from cmp3 looks very good」）。
 2. ~~顶部按钮看不清~~ — **已改成不透明**（用户 2026-11-19 05:20 要求「直接让按钮背景不透明」）：`crates/of-app/src/app.rs` 的 `top_bar()` 进入时把 `visuals.widgets` 的 inactive/open/noninteractive/hovered/active 全换成 `theme::bar_control()`（Dark `#3d3d43` / hover `#4a4a51` / active `#56565e`；Light `#d9d9df` / `#cdcdd5` / `#c0c0ca`），不再依赖半透明 `control`；对照图 `target/tmp/bar-cmp.png`，已进 dev 包。

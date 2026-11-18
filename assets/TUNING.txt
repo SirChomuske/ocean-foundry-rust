@@ -64,6 +64,13 @@ tone_smoothing_least  waves smoothed away, so it shows the swell and not
 chop_most           How far full "Crest sharpness" pulls the water toward the
                     crests: 1 is a true trochoid.
 cusp_limit          Sharpening stops before the steepest crests fold over.
+wander              How far the crests wander from the straight lines that a
+                    sum of plane waves would make, as a share of the peak
+                    distance. A sea drawn without it reads as a pattern: long,
+                    straight, evenly spaced ridges. 0 turns it off.
+wander_size         Over how many peak distances a bend comes and goes. Small
+                    numbers give a close, choppy wobble; large ones let whole
+                    stretches of sea run at their own angle.
 
 
 near_land - what land does to the waves (only with land)
@@ -95,7 +102,15 @@ cliff               Share of a wave's height a cliff throws back.
 rocky               The same for a rocky shore.
 beach               The same for a beach (waves break there and are spent).
 reach               How far out the returning waves are seen, in main waves:
-                    at this distance about a third is left.
+                    at this distance about a third is left. Waves spread
+                    and lose height on the way, so this is short: a quarter
+                    of a main wave, not the whole sea.
+soften              How many blocks wide a square the returning wave is
+                    spread over before it is added. A shore far off sends
+                    its wave home with crests closer together than a block,
+                    so read outright it draws a crease of light across the
+                    waves wherever the two trains fall out of step. 0 adds
+                    it as it stands.
 
 
 ripples - fine ripples that exist only as shading
@@ -186,6 +201,36 @@ foam_streak         Length and width of the streaks that foam is drawn into,
                     in blocks.
 foam_from           A current slower than this many metres a second leaves
                     no foam; at three times this it leaves all of it.
+impact_bonus        How much the speed of the current raises the white water
+                    at a shore it strikes, on top of what the shore gives on
+                    its own. Was 0.35 before it flooded a fast current's
+                    shores.
+fast_cap            How much white water a fast current is rid of at the
+                    faces it strikes, as it reaches three times foam_from. A
+                    fast current already breaks the sea white all around it,
+                    so those faces must not read as a sheet painted on top of
+                    that. The trail it drags keeps its own cap: that white
+                    wash is how a fast current reads.
+squeeze             How much faster the current runs where two shores press
+                    it together, as a share of its open speed. The same water
+                    through a smaller gap goes faster; 0 leaves it even.
+squeeze_reach       How far to the side the room is measured, in blocks.
+                    Shores closer together than twice this squeeze the
+                    current between them.
+foam_stretch        How far a squeezed current draws the foam out, against
+                    how much faster that current runs. 0 leaves it where it
+                    was made.
+stagnation          How much the current is stopped where it runs into a face
+                    that leaves it no way on, so the water piles up there and
+                    goes aside. 0 lets it run on as if the face were not there.
+mix                 How much of the foam a wake carries is stirred sideways
+                    into the water beside it: water behind an obstacle mixes
+                    out into the stream, so the wake widens downwind. 0 keeps
+                    the wake the width of what made it.
+mix_spread          How many blocks to each side that stirring reaches.
+squeeze_lift        How high the water stands where two shores squeeze the
+                    stream, as a share of the head the current has. A narrow
+                    way runs the water faster and lifts it a little.
 
 
 whitecaps - where waves break, and the foam they leave

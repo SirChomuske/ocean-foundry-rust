@@ -13,7 +13,7 @@
 //! the stage 5 measurements (`test-logs/measure/table-stage5.md`), rounded
 //! up a little.
 
-use crate::build::OceanSettings;
+use crate::settings::OceanSettings;
 use crate::terrain::Terrain;
 
 const MB: u64 = 1024 * 1024;

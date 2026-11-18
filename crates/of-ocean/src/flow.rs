@@ -29,6 +29,7 @@
 //!   which is farther than the waves do.
 
 use crate::build::fill_rows;
+use crate::circ::Circ;
 use crate::noise::smoothstep;
 use crate::terrain::Terrain;
 use crate::tuning::FlowTuning;
@@ -55,6 +56,8 @@ pub struct Flow {
     lift: Vec<f32>,
     most_lost: f64,
     calm: f64,
+    /// Where the land narrows the way, how much faster the water runs there.
+    room: Option<Circ>,
     /// How much white water the current leaves, 0 to 1, by its speed alone.
     foam: f64,
 }
@@ -156,6 +159,8 @@ impl Flow {
         direction: f64,
         metres: f64,
         tuning: &FlowTuning,
+        wake_length: f64,
+        wake_scale: f64,
         progress: &Progress,
         span: (f32, f32),
     ) -> Result<Option<Self>, String> {
@@ -171,10 +176,42 @@ impl Flow {
         let metres = metres.max(1e-3);
         let (sin, cos) = direction.to_radians().sin_cos();
         let toward = (cos, sin);
-        let slack = carried(row, rows, &land, toward, Fade::Widths(tuning.slack_widths.max(0.1)), tuning.slack_spread);
+        let mut slack = carried(row, rows, &land, toward, Fade::Widths(tuning.slack_widths.max(0.1)), tuning.slack_spread);
+        // A shadow whose edge is a block wide draws a straight line across
+        // the sea and turns the waves at it into a crease. Spread over a
+        // few blocks, both read as the swell they are.
+        let soften = ((tuning.slack_widths.max(0.1) * 0.5).round() as usize).clamp(1, 8);
+        soften_field(&mut slack, row, rows, soften);
+        // A lee is carried off faster than the water fills back in: the
+        // current's own mixing takes time, and the further downstream a
+        // column sits the more of the current it has back. The deficit
+        // falls as (1 + t/tau)^(-2/3), t being the time the water took to
+        // reach there, so a faster current draws out the same recovery
+        // over more blocks and the wake behind a rock ends instead of
+        // reaching the horizon.
+        let (away, _) = crate::survey::distances(row, rows, &|i| land[i]);
+        let tau = 1.5;
+        for (i, s) in slack.iter_mut().enumerate() {
+            let t = away[i] as f64 / speed.max(0.05);
+            let left = (1.0 + t / tau).powf(-2.0 / 3.0);
+            *s = (*s as f64 * left) as f32;
+        }
         let piled = carried(row, rows, &land, (-toward.0, -toward.1), Fade::Blocks(tuning.pile_reach), tuning.slack_spread);
-        // Foam is carried as far as the current runs while the foam lasts.
-        let trail = carried(row, rows, &land, toward, Fade::Blocks(speed * tuning.foam_life.max(0.0) / metres), tuning.slack_spread);
+        // Foam is carried as far as the current runs while the foam lasts,
+        // or as far as "Trail length" stretches that. "Wake size" stretches
+        // it both ways at once: drawn out further and fanned out wider.
+        let size = wake_scale.clamp(0.25, 4.0);
+        let life = speed * tuning.foam_life.max(0.0) * wake_length.clamp(0.0, 4.0) * size / metres;
+        let mut trail = carried(row, rows, &land, toward, Fade::Blocks(life), tuning.slack_spread * size);
+        // Where the land leaves the water less room than it has further along,
+        // the same current runs faster and drags its foam out with it.
+        let room = Circ::new(row, rows, &land, &away, toward, tuning);
+        if let Some(room) = &room {
+            room.draw_out(&mut trail, toward, tuning);
+            // Stirred twice: one pass only nudges the edge of a wake.
+            room.mix(&mut trail, (-toward.1, toward.0), tuning);
+            room.mix(&mut trail, (-toward.1, toward.0), tuning);
+        }
 
         // The head of the current and the distance between its standing
         // crests, both in blocks.
@@ -284,6 +321,20 @@ impl Flow {
         for i in 0..count {
             lift[i] = (lift[i] + pile * piled[i] - drop * slack[i] * slack[i]).clamp(-limit, limit);
         }
+        // Where two shores squeeze the stream it runs faster, and stands a
+        // little higher for it.
+        if let Some(room) = &room {
+            let rise = (head * tuning.squeeze_lift.max(0.0)) as f32;
+            // Only where the land is close enough to be squeezing the water:
+            // open sea reads a little narrower than the water further along it
+            // for no better reason than the way the room is measured.
+            let near = (tuning.squeeze_reach.max(1.0) * 3.0) as f32;
+            for (i, lift) in lift.iter_mut().enumerate().take(count) {
+                // Both fields are kept in the same order, rim and all.
+                let gate = 1.0 - smoothstep(0.0, near as f64, away[i] as f64) as f32;
+                *lift += rise * (room.at(i) as f32 - 1.0) * gate;
+            }
+        }
         let from = tuning.foam_from.max(0.01);
         Ok(Some(Self {
             row,
@@ -295,6 +346,7 @@ impl Flow {
             lift,
             most_lost: tuning.slack_most.clamp(0.0, 1.0),
             calm: tuning.calm.clamp(0.0, 1.0),
+            room,
             foam: tuning.foam.max(0.0) * smoothstep(from, 3.0 * from, speed),
         }))
     }
@@ -309,11 +361,29 @@ impl Flow {
         self.lift[self.index(x, z)] as f64
     }
 
+    /// How strongly the current strikes land at a column: the water piled
+    /// against the face. 0 to 1.
+    pub fn strike(&self, x: i32, z: i32) -> f64 {
+        self.foam * self.piled[self.index(x, z)] as f64
+    }
+
+    /// How much foam the current carries away from the land at a column,
+    /// drawn out downstream. 0 to 1.
+    pub fn wake(&self, x: i32, z: i32) -> f64 {
+        self.foam * self.trail[self.index(x, z)] as f64
+    }
+
     /// How much white water the current leaves at a column: where it
     /// strikes land, and carried along behind the land. 0 to 1.
-    pub fn churn(&self, x: i32, z: i32) -> f64 {
-        let i = self.index(x, z);
-        self.foam * (self.trail[i] as f64).max(self.piled[i] as f64)
+    #[cfg(test)]
+    fn churn(&self, x: i32, z: i32) -> f64 {
+        self.strike(x, z).max(self.wake(x, z))
+    }
+
+    /// How fast the current runs at a column against its open speed: 1 where
+    /// nothing narrows the way, more where two shores squeeze it.
+    pub fn squeezed(&self, x: i32, z: i32) -> f64 {
+        self.room.as_ref().map_or(1.0, |r| r.at(self.index(x, z)))
     }
 
     /// The speed the current has lost at a place of the plot with its rim,
@@ -326,6 +396,42 @@ impl Flow {
     /// with its rim: slack water behind land is smoother than the sea.
     pub(crate) fn ruffled(&self, place: usize) -> f64 {
         1.0 - self.calm * self.slack[place] as f64
+    }
+}
+
+/// Average a field of the plot with its rim over a square of `radius` blocks
+/// to each side, by running sums along each row and then along each column.
+fn soften_field(values: &mut [f32], row: usize, rows: usize, radius: usize) {
+    if radius == 0 || values.is_empty() {
+        return;
+    }
+    let mut line = vec![0f32; row.max(rows)];
+    for z in 0..rows {
+        let base = z * row;
+        let mut sum = 0.0f32;
+        for x in 0..row {
+            sum += values[base + x];
+            line[x] = sum;
+        }
+        for x in 0..row {
+            let lo = x.saturating_sub(radius);
+            let hi = (x + radius).min(row - 1);
+            let before = if lo > 0 { line[lo - 1] } else { 0.0 };
+            values[base + x] = (line[hi] - before) / (hi - lo + 1) as f32;
+        }
+    }
+    for x in 0..row {
+        let mut sum = 0.0f32;
+        for z in 0..rows {
+            sum += values[z * row + x];
+            line[z] = sum;
+        }
+        for z in 0..rows {
+            let lo = z.saturating_sub(radius);
+            let hi = (z + radius).min(rows - 1);
+            let before = if lo > 0 { line[lo - 1] } else { 0.0 };
+            values[z * row + x] = (line[hi] - before) / (hi - lo + 1) as f32;
+        }
     }
 }
 
@@ -342,14 +448,36 @@ mod tests {
     }
 
     fn flow(speed: f64, direction: f64) -> Option<Flow> {
-        Flow::new(&pillar(240, 16), speed, direction, 0.25, &FlowTuning::default(), &Progress::none(), (0.0, 1.0)).unwrap()
+        Flow::new(&pillar(240, 16), speed, direction, 0.25, &FlowTuning::default(), 1.0, 1.0, &Progress::none(), (0.0, 1.0)).unwrap()
     }
 
     #[test]
     fn no_current_or_no_land_leaves_the_sea_alone() {
         assert!(flow(0.0, 0.0).is_none());
         let open = Terrain::from_heights(64, 64, -40, vec![-40.0; 64 * 64], vec![Ground::Rock; 64 * 64]);
-        assert!(Flow::new(&open, 5.0, 0.0, 0.25, &FlowTuning::default(), &Progress::none(), (0.0, 1.0)).unwrap().is_none());
+        assert!(Flow::new(&open, 5.0, 0.0, 0.25, &FlowTuning::default(), 1.0, 1.0, &Progress::none(), (0.0, 1.0)).unwrap().is_none());
+    }
+
+    /// Two long walls with a straight channel between them.
+    fn channel(size: i32, mouth: (i32, i32)) -> Terrain {
+        let (a, b) = mouth;
+        let height: Vec<f32> = (0..size * size)
+            .map(|i| {
+                let (x, z) = (i % size, i / size);
+                let wall = (40..160).contains(&x) && (((a - 6)..a).contains(&z) || (b..b + 6).contains(&z));
+                if wall { 30.0 } else { -40.0 }
+            })
+            .collect();
+        Terrain::from_heights(size, size, -40, height, vec![Ground::Rock; (size * size) as usize])
+    }
+
+    #[test]
+    fn water_stands_higher_where_two_shores_squeeze_it() {
+        let f = Flow::new(&channel(200, (90, 110)), 5.0, 0.0, 0.25, &FlowTuning::default(), 1.0, 1.0, &Progress::none(), (0.0, 1.0)).unwrap().unwrap();
+        let (squeezed, open) = (f.lift(100, 100), f.lift(20, 20));
+        println!("lift in the narrows {squeezed:.2}, in the open {open:.2}, speed {:.2}", f.squeezed(100, 100));
+        assert!(f.squeezed(100, 100) > 1.05, "the narrows should run faster than the open sea");
+        assert!(squeezed > open + 0.02, "the narrows should stand a little higher than the open sea");
     }
 
     #[test]
@@ -366,7 +494,11 @@ mod tests {
         // The current runs east: the west face is struck, the east side is sheltered.
         assert!(f.lift(110, 120) > 1.5, "{}", f.lift(110, 120));
         assert!(f.churn(110, 120) > 0.5 && f.churn(130, 120) > 0.5);
-        assert!(f.lost(121 * 242 + 131) > 3.0 && f.lost(121 * 242 + 100) == 0.0);
+        // The slack shadow is spread over a few blocks so it has no seam, so
+        // it peaks lower than a hard one did: ten blocks behind the land the
+        // current is still about two and a half times as far down.
+        assert!(f.lost(121 * 242 + 131) > 1.8, "{}", f.lost(121 * 242 + 131));
+        assert!(f.lost(121 * 242 + 100) == 0.0);
         // Far to the side nothing has changed.
         assert_eq!(f.lift(120, 10), 0.0);
         assert_eq!(f.churn(120, 10), 0.0);
@@ -375,13 +507,47 @@ mod tests {
         assert!(f.lost(121 * 242 + 235) < 0.5 * f.lost(121 * 242 + 131));
         assert!(f.churn(234, 120) > 0.1);
         // A wider pillar leaves a longer wake.
-        let wide = Flow::new(&pillar(240, 32), 5.0, 0.0, 0.25, &FlowTuning::default(), &Progress::none(), (0.0, 1.0)).unwrap().unwrap();
+        let wide = Flow::new(&pillar(240, 32), 5.0, 0.0, 0.25, &FlowTuning::default(), 1.0, 1.0, &Progress::none(), (0.0, 1.0)).unwrap().unwrap();
         assert!(wide.lost(121 * 242 + 235) > 1.3 * f.lost(121 * 242 + 235));
         // A faster current carries its foam farther.
         let fast = flow(8.0, 0.0).unwrap();
         assert!(fast.churn(234, 120) > f.churn(234, 120));
         // The wake lies behind the land whichever way the current runs.
         let north = flow(5.0, 270.0).unwrap();
-        assert!(north.lost(100 * 242 + 121) > 3.0 && north.lost(140 * 242 + 121) == 0.0);
+        assert!(north.lost(100 * 242 + 121) > 1.8 && north.lost(140 * 242 + 121) == 0.0);
+    }
+
+    #[test]
+    fn the_trail_recovers_and_its_length_can_be_set() {
+        let tuned = |wake_length: f64| {
+            Flow::new(&pillar(240, 16), 5.0, 0.0, 0.25, &FlowTuning::default(), wake_length, 1.0, &Progress::none(), (0.0, 1.0)).unwrap().unwrap()
+        };
+        let (short, long) = (tuned(0.1), tuned(3.0));
+        // The foam is thrown up where the water strikes the land, and is
+        // carried away behind it rather than in front of it.
+        assert!(short.strike(110, 120) > 0.5, "{}", short.strike(110, 120));
+        assert!(short.wake(110, 120) < 0.2, "{}", short.wake(110, 120));
+        assert!(short.wake(140, 120) > short.strike(140, 120));
+        // A short trail is used up quickly, so the sea recovers behind land.
+        assert!(short.wake(234, 120) < 0.05, "{}", short.wake(234, 120));
+        // Stretching the trail carries foam farther, and is all that does.
+        assert!(long.wake(234, 120) > 3.0 * short.wake(234, 120));
+        assert_eq!(short.strike(234, 120), long.strike(234, 120));
+    }
+
+    #[test]
+    fn the_wake_grows_with_its_size() {
+        let sized = |wake_scale: f64| {
+            Flow::new(&pillar(240, 16), 5.0, 0.0, 0.25, &FlowTuning::default(), 1.0, wake_scale, &Progress::none(), (0.0, 1.0)).unwrap().unwrap()
+        };
+        let (small, normal, big) = (sized(0.5), sized(1.0), sized(3.0));
+        // Size multiplies the trail length, so foam reaches farther.
+        assert!(big.wake(234, 120) > 1.1 * normal.wake(234, 120), "{} {}", big.wake(234, 120), normal.wake(234, 120));
+        assert!(small.wake(234, 120) < normal.wake(234, 120), "{}", small.wake(234, 120));
+        // It also fans the trail out, so it is wider a little way behind.
+        assert!(big.wake(170, 100) > 2.0 * normal.wake(170, 100), "{} {}", big.wake(170, 100), normal.wake(170, 100));
+        // And it leaves the waves themselves alone.
+        assert_eq!(small.lift(110, 120), big.lift(110, 120));
+        assert_eq!(small.strike(110, 120), big.strike(110, 120));
     }
 }

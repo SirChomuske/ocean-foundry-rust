@@ -59,7 +59,7 @@ impl Reworked {
         self.cols.is_empty() || self.find(column).is_none_or(|c| level < c.1)
     }
     /// The water's runs in a column.
-    pub fn runs_at(&self, column: u32) -> &[(i32, i32, u32)] {
+    fn runs_at(&self, column: u32) -> &[(i32, i32, u32)] {
         self.find(column).map_or(&[], |c| &self.runs[c.2 as usize..c.3 as usize])
     }
 }
@@ -251,7 +251,14 @@ impl Baked {
             Blocks::Columns(c) => {
                 let mut build = LayeredBuild::new(&c.name);
                 build.palette = c.palette.clone();
-                self.for_each_block(|layer, p, id| build.layer_mut(layer).set(p, id));
+                self.for_each_block(|layer, p, id| {
+                    // Where the build already stands, the sea keeps out: its
+                    // blocks hold their place and the water is laid around them.
+                    if WATER.contains(&layer) && build.layer(Layer::Terrain).get(p).is_some() {
+                        return;
+                    }
+                    build.layer_mut(layer).set(p, id);
+                });
                 Cow::Owned(build)
             }
         }
@@ -424,6 +431,10 @@ impl BlockSource for BakeSource<'_> {
         if WATER.iter().any(|l| layers.contains(l)) {
             let row = (z * self.baked.width + lo) as usize;
             for (k, o) in part.iter_mut().enumerate() {
+                // A block the build already stands there keeps its place.
+                if *o != 0 {
+                    continue;
+                }
                 if let Some((layer, id)) = self.water(c, row + k, y) {
                     if layers.contains(&layer) {
                         *o = id + 1;
@@ -436,22 +447,10 @@ impl BlockSource for BakeSource<'_> {
         if let Some(b) = &self.layered {
             return b.conflicts(layers);
         }
-        // The water layers never share a place with each other, so only
-        // terrain under the chosen water can clash.
-        if !layers.contains(&Layer::Terrain) || !WATER.iter().any(|l| layers.contains(l)) {
-            return 0;
-        }
-        let c = self.columns();
-        let mut clashes = std::collections::HashSet::new();
-        self.baked.for_each_block(|layer, p, _| {
-            if layer != Layer::Terrain || !self.inside(p[0], p[2]) {
-                return;
-            }
-            let i = (p[2] * self.baked.width + p[0]) as usize;
-            if self.water(c, i, p[1]).is_some_and(|(l, _)| layers.contains(&l)) {
-                clashes.insert(p);
-            }
-        });
-        clashes.len() as u64
+        // The water layers never share a place with each other, and where the
+        // build already stands the water is not laid at all, so nothing here
+        // is written twice. A block the build brought in stays as it is.
+        let _ = layers;
+        0
     }
 }

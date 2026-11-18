@@ -29,7 +29,8 @@
 
 use crate::build::fill_rows;
 use crate::flow::Flow;
-use crate::noise::smoothstep;
+use crate::noise::{smoothstep, value};
+use crate::survey::distances;
 use crate::terrain::{Mouth, Terrain};
 use crate::tuning::{NearLandTuning, OutflowTuning};
 use crate::waves::{Near, WaveField};
@@ -195,6 +196,8 @@ impl Shore {
         // Rivers running out into the sea. What matters to a wave is the
         // current along its own path, as a share of its own speed: found
         // here for the main waves, from the way the crests already run.
+        // How far every column lies from land, for fading a shadow out.
+        let (from_land, _) = distances(row, rows, &|i| land[i]);
         let mut against = vec![0f32; count];
         let mut plume = vec![0f32; count];
         let rivers = !terrain.mouths().is_empty() && outflow.speed > 0.0;
@@ -204,15 +207,45 @@ impl Shore {
             // The speed of the main waves themselves, in metres a second.
             let own = (9.81 * field.peak_length() * metres.max(1e-3) / TAU).sqrt();
             let rise = |a: usize, b: usize| if arrival[a].is_finite() && arrival[b].is_finite() { arrival[b] - arrival[a] } else { 0.0 };
+            // A current's shadow has an edge a block or two wide, and a wave
+            // bending across so sharp a step leaves a crease in the sea.
+            // Softened over a part of a wave length, the bend reads as a swell.
+            let soften = ((field.peak_length() / 12.0).round() as usize).clamp(1, 12);
+            let lost_smooth: Option<Vec<f64>> = flow.map(|f| {
+                let rough: Vec<f64> = (0..count).map(|i| f.lost(i)).collect();
+                blurred(&rough, row, soften)
+            });
             for i in 0..count {
                 let (mut ux, mut uz) = (speed * run[i].0 as f64, speed * run[i].1 as f64);
                 plume[i] = (run[i].0 as f64).hypot(run[i].1 as f64).min(1.0) as f32;
                 // Behind land a current is slack. The waves rode in on the
                 // current, so to them slack water runs the other way.
                 if let Some(f) = flow {
-                    let lost = f.lost(i) / own;
+                    // Bending the waves this hard drew creases where the
+                    // shadows end, so the waves turn only a little.
+                    const BEND: f64 = 0.25;
+                    // A wake opens at 19.47 degrees either side of the run
+                    // and thins out with distance as x^(-1/3), so the
+                    // V dies away into the plain sea instead of ruling
+                    // lines to the far edge.
+                    let span = 2.5 * field.peak_length().max(1.0);
+                    let thin = (1.0 + from_land[i] as f64 / span).powf(-1.0 / 3.0);
+                    let lost = lost_smooth.as_ref().map_or(0.0, |v| v[i]) * BEND * thin / own;
                     ux -= lost * f.toward.0;
                     uz -= lost * f.toward.1;
+                    // A wake opens at 19.47 degrees either side of the
+                    // run of the water, whatever its speed: crests that
+                    // would turn further are not in the pattern, so the
+                    // turn is held inside that wedge.
+                    const WEDGE: f64 = 0.3536;
+                    let along = ux * f.toward.0 + uz * f.toward.1;
+                    let across = -ux * f.toward.1 + uz * f.toward.0;
+                    let limit = WEDGE * along.abs().max(own * 0.05);
+                    if across.abs() > limit {
+                        let fix = across.signum() * limit - across;
+                        ux -= fix * f.toward.1;
+                        uz += fix * f.toward.0;
+                    }
                 }
                 if ux == 0.0 && uz == 0.0 {
                     continue;
@@ -231,7 +264,7 @@ impl Shore {
         let short_slower = (field.peak_length() / field.short_length().max(1.0)).sqrt().max(1.0);
         let most = outflow.gain_most;
         let against = &against;
-        let lag: Vec<f32> = (0..count)
+        let mut lag: Vec<f32> = (0..count)
             .map(|i| {
                 let along = (i % row) as f64 * heading.0 + (i / row) as f64 * heading.1;
                 if arrival[i].is_finite() { (arrival[i] - along).max(0.0) as f32 } else { 0.0 }
@@ -251,9 +284,67 @@ impl Shore {
         let (for_long, for_short) = (weights(field.spread()), weights((field.spread() * 0.25).max(1.0)));
         let up = heading.1.atan2(heading.0) + std::f64::consts::PI;
         let lines: Vec<(f64, f64)> = (0..rays).map(|j| (up + offset(j, rays, fan)).sin_cos()).map(|(s, c)| (c, s)).collect();
-        const STEP: f64 = 1.5;
+        const STEP: f64 = 3.0;
         let steps = ((tuning.shelter_reach.max(0.0) * field.peak_length() / STEP) as usize).max(1);
+        // Each line stands for the wedge of sea between it and the next,
+        // which widens with distance. Land passing through part of a wedge
+        // shelters that part, so the shelter fades in across the wedge
+        // rather than switching on at the line itself: a line that is
+        // either blocked or not would draw its edge through every corner
+        // of the land as a straight streak across the water.
+        let half_wedge = if rays > 1 { (fan / (rays - 1) as f64).min(1.2).tan() } else { 1.0 };
+        let (to_land, _) = distances(row, rows, &|i| land[i]);
+        let (to_sea, _) = distances(row, rows, &|i| !land[i]);
+        // How far into the water (above 0) or into the land (below) each
+        // column lies, read between columns so it changes smoothly.
+        let side: Vec<f32> = (0..count).map(|i| if land[i] { 0.5 - to_sea[i] } else { to_land[i] - 0.5 }.clamp(-1e6, 1e6)).collect();
+        let side_at = |px: f64, pz: f64| -> f64 {
+            let (fx, fz) = ((px - 0.5).clamp(0.0, (row - 1) as f64), (pz - 0.5).clamp(0.0, (rows - 1) as f64));
+            let (x0, z0) = (fx as usize, fz as usize);
+            let (x1, z1) = ((x0 + 1).min(row - 1), (z0 + 1).min(rows - 1));
+            let (tx, tz) = (fx - x0 as f64, fz - z0 as f64);
+            let v = |x: usize, z: usize| side[z * row + x] as f64;
+            let top = v(x0, z0) + (v(x1, z0) - v(x0, z0)) * tx;
+            let bottom = v(x0, z1) + (v(x1, z1) - v(x0, z1)) * tx;
+            top + (bottom - top) * tz
+        };
         let ratio = tuning.breaker_ratio.max(0.01);
+        // How much of the long waves the depth at each column lets through,
+        // averaged over the width of a wedge where a line passes. Read
+        // along the line alone, the shallows would switch on and off at
+        // its edge as sharply as land does. Land itself counts as passing
+        // all: what it stops is counted above.
+        let shoal: Vec<f64> = (0..count).map(|i| if land[i] { 1.0 } else { eased(ratio * depth[i] / tallest.max(1e-9)) }).collect();
+        let (srow, mut summed) = (row + 1, vec![0f64; (row + 1) * (rows + 1)]);
+        for z in 0..rows {
+            for x in 0..row {
+                summed[(z + 1) * srow + x + 1] = shoal[z * row + x] + summed[z * srow + x + 1] + summed[(z + 1) * srow + x] - summed[z * srow + x];
+            }
+        }
+        let square = |x: usize, z: usize, r: usize| -> f64 {
+            let (x0, z0, x1, z1) = (x.saturating_sub(r), z.saturating_sub(r), (x + r + 1).min(row), (z + r + 1).min(rows));
+            let total = summed[z1 * srow + x1] - summed[z0 * srow + x1] - summed[z1 * srow + x0] + summed[z0 * srow + x0];
+            total / ((x1 - x0) * (z1 - z0)) as f64
+        };
+        // How far each column lies from land or from a sudden change in
+        // depth, such as the edge of a shelf. Where a wedge is narrower than
+        // that, the land cannot reach into it and the depth across it is
+        // as at its middle, so most of the sea takes one look a step, as
+        // fast as a bare line.
+        let sharp = |i: usize| {
+            let (x, z) = (i % row, i / row);
+            [(x > 0).then(|| i - 1), (x + 1 < row).then(|| i + 1), (z > 0).then(|| i - row), (z + 1 < rows).then(|| i + row)]
+                .into_iter()
+                .flatten()
+                .any(|n| (shoal[n] - shoal[i]).abs() > 0.01)
+        };
+        let (clear, _) = distances(row, rows, &|i| land[i] || sharp(i));
+        let shoal_at = |px: f64, pz: f64, wide: f64| -> f64 {
+            let (x, z) = (px as usize, pz as usize);
+            let r = (wide - 0.5).max(0.0);
+            let (lo, t) = (r.floor() as usize, r.fract());
+            square(x, z, lo) * (1.0 - t) + square(x, z, lo + 1) * t
+        };
         let (keep, floor, regrow) = (tuning.height_at_shore.clamp(0.0, 1.0), tuning.shelter_floor.clamp(0.0, 1.0), tuning.chop_regrow.max(0.1));
 
         let mut cells = vec![Cell { long: 1.0, short: 1.0, open_long: 1.0, surf: 0.0 }; count];
@@ -262,31 +353,44 @@ impl Shore {
                 for (gx, cell) in out.iter_mut().enumerate() {
                     let here = depth[gz * row + gx];
                     let (mut long, mut open_long, mut open_short) = (0.0, 0.0, 0.0);
+                    // The lines are turned a little, this way and that,
+                    // so a shadow wanders as it runs out instead of
+                    // ruling a straight edge across the water.
+                    let turn = value(gx as f64 / 26.0, gz as f64 / 26.0, 0x51A7) * 0.07;
+                    let (turn_s, turn_c) = turn.sin_cos();
                     for (j, line) in lines.iter().enumerate() {
+                        let line = (line.0 * turn_c - line.1 * turn_s, line.0 * turn_s + line.1 * turn_c);
                         let (mut px, mut pz) = (gx as f64 + 0.5, gz as f64 + 0.5);
-                        let (mut shallowest, mut blocked) = (here, None);
+                        // The share of the wedge that gets through, and how
+                        // far off the land that took the rest of it lies.
+                        let (mut shoaled, mut through, mut distance) = (eased(ratio * here / tallest), 1.0f64, 0.0);
                         for n in 1..=steps {
                             px += line.0 * STEP;
                             pz += line.1 * STEP;
                             if px < 0.0 || pz < 0.0 || px >= row as f64 || pz >= rows as f64 {
                                 break;
                             }
+                            let away = n as f64 * STEP;
+                            let wide = (away * half_wedge).max(0.5);
                             let i = pz as usize * row + px as usize;
-                            if land[i] {
-                                blocked = Some(n as f64 * STEP);
+                            if clear[i] as f64 > wide + 2.5 {
+                                shoaled = shoaled.min(shoal[i]);
+                                continue;
+                            }
+                            let left = (0.5 + side_at(px, pz) / (2.0 * wide)).clamp(0.0, 1.0);
+                            if left < through {
+                                (through, distance) = (left, away);
+                            }
+                            if through < 0.005 {
                                 break;
                             }
-                            shallowest = shallowest.min(depth[i]);
+                            shoaled = shoaled.min(shoal_at(px, pz, wide));
                         }
-                        match blocked {
-                            // Short waves are raised again by the wind behind land.
-                            Some(distance) => open_short += for_short[j] * (1.0 - (-distance / regrow).exp()).powi(2),
-                            None => {
-                                open_long += for_long[j];
-                                open_short += for_short[j];
-                                long += for_long[j] * eased(ratio * shallowest / tallest).powi(2);
-                            }
-                        }
+                        // Short waves are raised again by the wind behind land.
+                        let raised = if distance > 0.0 { (1.0 - (-distance / regrow).exp()).powi(2) } else { 0.0 };
+                        open_long += for_long[j] * through;
+                        open_short += for_short[j] * (through + (1.0 - through) * raised);
+                        long += for_long[j] * through * shoaled.powi(2);
                     }
                     let (open_long, open_short) = (open_long.sqrt(), open_short.sqrt());
                     let long = long.sqrt().max(floor * eased(ratio * here / tallest));
@@ -306,6 +410,58 @@ impl Shore {
                     };
                 }
             })?;
+        }
+        // A shadow does not run to the horizon. Diffraction fills a lee back
+        // in, the height there falling about as 1/sqrt(1 + x/L) with L a
+        // few wavelengths, so the sea behind land looks itself again soon.
+        let span = 2.5 * field.peak_length().max(1.0);
+        for (i, cell) in cells.iter_mut().enumerate() {
+            let left = 1.0 / (1.0 + clear[i] as f64 / span).sqrt();
+            cell.long = (1.0 - (1.0 - cell.long as f64) * left) as f32;
+            cell.short = (1.0 - (1.0 - cell.short as f64) * left) as f32;
+            cell.open_long = (1.0 - (1.0 - cell.open_long as f64) * left) as f32;
+        }
+        // A low wall of a build is washed over: the crests run on across it
+        // instead of ending at a vertical face, so it takes the waves of the
+        // water beside it. A natural shore keeps its own edge.
+        const LOW_TOP: i32 = 3;
+        if terrain.placed.is_some() {
+            let low: Vec<bool> = (0..count)
+                .map(|i| land[i] && ground(i).round() as i32 <= LOW_TOP)
+                .collect();
+            let mut water_near = vec![None; count];
+            for i in 0..count {
+                if !low[i] {
+                    continue;
+                }
+                let (x, z) = ((i % row) as i32, (i / row) as i32);
+                let mut best = f64::MAX;
+                let mut pick = None;
+                for dz in -6..=6i32 {
+                    for dx in -6..=6i32 {
+                        let (nx, nz) = (x + dx, z + dz);
+                        if nx < 0 || nz < 0 || nx >= row as i32 || nz >= rows as i32 {
+                            continue;
+                        }
+                        let j = nz as usize * row + nx as usize;
+                        if land[j] {
+                            continue;
+                        }
+                        let far = (dx * dx + dz * dz) as f64;
+                        if far < best {
+                            best = far;
+                            pick = Some(j);
+                        }
+                    }
+                }
+                water_near[i] = pick;
+            }
+            for i in 0..count {
+                if let Some(j) = water_near[i] {
+                    cells[i] = cells[j];
+                    lag[i] = lag[j];
+                }
+            }
         }
         if let Some(f) = flow {
             for (i, cell) in cells.iter_mut().enumerate() {

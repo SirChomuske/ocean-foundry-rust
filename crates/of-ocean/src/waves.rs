@@ -21,7 +21,7 @@
 //!   asked what it looked like a moment ago. That is how foam knows where
 //!   waves were breaking just before.
 
-use crate::noise::{hash, smoothstep};
+use crate::noise::{fbm, hash, smoothstep};
 use crate::tuning::WaveTuning;
 use std::f64::consts::{PI, TAU};
 
@@ -98,6 +98,12 @@ pub struct WaveField {
     waves: Vec<Wave>,
     /// How far the water moves toward the crests, as a share of a full trochoid.
     chop: f64,
+    /// How far the crests wander sideways from the straight lines a sum of
+    /// plane waves would make, in blocks.
+    wander: f64,
+    /// Over how many blocks the wandering turns, in blocks.
+    wander_size: f64,
+    wander_seed: u32,
     lowest: f64,
     highest: f64,
     steepest: f64,
@@ -245,6 +251,9 @@ impl WaveField {
         let mut field = Self {
             waves,
             chop: 0.0,
+            wander: tuning.wander.max(0.0) * peak_length,
+            wander_size: (tuning.wander_size.max(0.05) * peak_length).max(1.0),
+            wander_seed: s.seed ^ 0x6A09_E667,
             lowest: f64::MIN,
             highest: f64::MAX,
             steepest: 0.0,
@@ -310,10 +319,27 @@ impl WaveField {
         (lo, hi, steep)
     }
 
+    /// The place the waves are actually drawn for. A real sea is not a row
+    /// of parallel ridges: the crests wander, and every stretch of water has
+    /// its own idea of which way and at what length the waves run. Bending
+    /// the place they are drawn for, rather than their directions, does the
+    /// same job and keeps the water continuous.
+    fn bent(&self, x: f64, z: f64) -> (f64, f64) {
+        if self.wander <= 0.0 {
+            return (x, z);
+        }
+        let s = self.wander_size;
+        let (u, v) = (x / s, z / s);
+        let along = fbm(u, v, self.wander_seed, 2);
+        let across = fbm(u + 41.7, v - 23.3, self.wander_seed ^ 0x1B87_3F5D, 2);
+        (x + along * self.wander, z + across * self.wander)
+    }
+
     /// The components added up at a place where the water has not been moved
     /// sideways: height, steepness, how far the water there is moved, and
     /// the smoothed height.
     fn sum(&self, x: f64, z: f64, near: &Near) -> (f64, f64, f64, f64, f64) {
+        let (x, z) = self.bent(x, z);
         let (mut height, mut steep, mut dx, mut dz, mut smooth) = (0.0, 0.0, 0.0, 0.0, 0.0);
         for w in &self.waves {
             let along = x * w.dir.0 + z * w.dir.1 - near.lag;
@@ -353,6 +379,7 @@ impl WaveField {
     /// times 2 pi over the wavelength, and waves break as it nears 0.44.
     /// The short waves riding on the sea count for `short_share` of theirs.
     pub fn steepness(&self, x: f64, z: f64, ago: f64, near: &Near, short_share: f64) -> f64 {
+        let (x, z) = self.bent(x, z);
         let (long, short) = (near.long, near.short * short_share);
         let mut steep = 0.0;
         for w in &self.waves {

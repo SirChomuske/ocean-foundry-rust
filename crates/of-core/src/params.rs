@@ -306,6 +306,11 @@ pub static REGISTRY: &[ParamDef] = &[
     p!("ocean.metres_per_block", Ocean, "physical", Scene, false, float(0.25, 4.0, 1.0, 2)),
     p!("ocean.flow_speed", Ocean, "physical", Scene, false, float(0.0, 10.0, 0.0, 1)),
     p!("ocean.flow_direction", Ocean, "physical", Scene, false, float(0.0, 360.0, 0.0, 0)),
+    p!("ocean.impact_foam", Ocean, "physical", Scene, false, unit(0.5)),
+    p!("ocean.wake_foam", Ocean, "physical", Scene, false, unit(0.5)),
+    p!("ocean.wake_length", Ocean, "physical", Scene, false, float(0.0, 3.0, 1.0, 1)),
+    p!("ocean.wake_scale", Ocean, "physical", Scene, false, float(0.5, 3.0, 1.0, 1)),
+    p!("ocean.spray", Ocean, "physical", Scene, false, unit(0.5)),
     // ---- Lava: area ----
     #[cfg(feature = "dev")]
     p!("lava.width", Lava, "area", Scene, false, int(16, MAX_EXTENT, 128)),
@@ -407,6 +412,8 @@ pub fn is_relevant(def: &ParamDef, values: &ParamValues) -> bool {
         "ocean.shell_thickness" => choice_is("ocean.build_style", "shell"),
         // A current that does not run has no direction.
         "ocean.flow_direction" => positive("ocean.flow_speed"),
+        // Nor does it leave any white water, however much is asked for.
+        "ocean.impact_foam" | "ocean.wake_foam" | "ocean.wake_length" | "ocean.wake_scale" => positive("ocean.flow_speed"),
         "ocean.swell_length" | "ocean.swell_direction" => positive("ocean.swell_height"),
         #[cfg(feature = "dev")]
         "lava.max_glass" => positive("lava.glass_layers"),

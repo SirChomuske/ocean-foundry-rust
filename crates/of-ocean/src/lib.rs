@@ -8,17 +8,21 @@
 //! method's internal numbers live in `tuning`, so it can be adjusted
 //! without rebuilding the program.
 
+pub mod baked;
 pub mod blocks;
 pub mod build;
+pub mod circ;
 pub mod colour;
 pub mod estimate;
 pub mod flow;
 /// Lava is on hold: only the development build has it.
 #[cfg(feature = "dev")]
 pub mod lava;
+pub mod look;
 pub mod noise;
 pub mod pattern;
 pub mod render;
+pub mod settings;
 pub mod scene;
 pub mod shore;
 pub mod survey;
@@ -28,7 +32,10 @@ pub mod waves;
 pub mod zone;
 
 pub use blocks::{BakeSource, Blocks, Columns, Land as LandBlocks, Stack};
-pub use build::{bake, bake_with, Baked, Look, OceanSettings, Stats, DRY};
+pub use build::{bake, bake_with};
+pub use baked::{Baked, Stats, DRY};
+pub use look::{Dither, Look};
+pub use settings::{OceanSettings, Seabed};
 pub use scene::{BuildPlacement, Land, SceneSetup, SCENE_FILE};
 pub use survey::{read_shore, Reading, ShoreKind, Survey};
 #[cfg(feature = "dev")]
@@ -48,6 +55,7 @@ mod tests {
     use of_formats::export::{self, AirMode, ExportOptions, Layer, Selection};
     use of_formats::model::Format;
     use of_formats::Progress;
+    use crate::tuning::WaveTuning;
     use std::collections::BTreeMap;
 
     fn settings(width: i32, length: i32) -> OceanSettings {
@@ -160,10 +168,14 @@ mod tests {
             assert!(alike(&field, step * length, 0.0).abs() < 0.3, "the sea repeats after {step} wavelengths");
         }
         // Along a crest, a regular swell stays alike far longer than a confused sea.
+        // The crests of the sea wander on their own, so that measure needs the
+        // spectrum on its own: this is about the fan of directions, not the bends.
+        let mut straight = WaveTuning::default();
+        straight.wander = 0.0;
         w.irregularity = 0.0;
-        let regular = alike(&WaveField::new(&w), 0.0, 2.0 * length);
+        let regular = alike(&WaveField::with(&w, &straight), 0.0, 2.0 * length);
         w.irregularity = 1.0;
-        let confused = alike(&WaveField::new(&w), 0.0, 2.0 * length);
+        let confused = alike(&WaveField::with(&w, &straight), 0.0, 2.0 * length);
         assert!(regular > 0.45 && confused < 0.25, "regular {regular}, confused {confused}");
     }
 
@@ -263,7 +275,9 @@ mod tests {
             Zone { kind: ZoneKind::Dry, at: [0.2, 0.2], radius: 8.0, strength: 0.0 },
         ];
         let zoned = bake("zoned", &s, None, cat).unwrap();
-        let (rough, calm) = (roughness(&open, 54..74, 54..74), roughness(&zoned, 54..74, 54..74));
+        // The same square of sea, calmed; wide enough that the sea's own
+        // bends cannot leave a patch sitting on a flat trough by luck.
+        let (rough, calm) = (roughness(&open, 44..84, 44..84), roughness(&zoned, 44..84, 44..84));
         assert!(rough > 1.0 && calm < 0.2 * rough, "calm water {calm} against {rough}");
         // Beyond the zones the sea is as it was.
         for z in 110..128 {
@@ -314,10 +328,58 @@ mod tests {
         let b = bake("lee", &s, Some(&land), cat).unwrap();
         let (open, lee) = (roughness(&b, 20..70, 45..95), roughness(&b, 100..130, 55..85));
         assert!(open > 1.0, "the open sea is flat: {open}");
-        assert!(lee < 0.45 * open, "no shelter: {lee} behind the island against {open} in front");
+        // Half the height is still a shelter: a patch of a sea whose crests
+        // wander never sits at exactly the same depth in the lee twice.
+        assert!(lee < 0.5 * open, "no shelter: {lee} behind the island against {open} in front");
         // Far to the side of the island the sea is as rough as in front of it.
         let beside = roughness(&b, 100..150, 0..18);
         assert!(beside > 0.6 * open, "the sea beside the island is too calm: {beside} against {open}");
+    }
+
+    #[test]
+    fn shelter_and_distance_have_no_seams_behind_a_corner() {
+        let (w, l) = (240, 200);
+        // Deep water with a square island; the waves run toward +X.
+        let mut height = vec![-40.0f32; (w * l) as usize];
+        for z in 60..100 {
+            for x in 40..80 {
+                height[(z * w + x) as usize] = 5.0;
+            }
+        }
+        let land = Terrain::from_heights(w, l, -10, height, vec![Ground::Rock; (w * l) as usize]);
+
+        // Distance from the shore is straight-line distance, the same in
+        // every direction from the corner, so its slope turns smoothly.
+        let survey = Survey::new(&land);
+        for k in 0..=18 {
+            let a = (k as f64 * 5.0).to_radians();
+            let (x, z) = (79.5 + 30.0 * a.cos(), 99.5 + 30.0 * a.sin());
+            let off = survey.off(x as i32, z as i32);
+            let (cx, cz) = (x.floor() + 0.5, z.floor() + 0.5);
+            let truth = (cx - cx.clamp(40.5, 79.5)).hypot(cz - cz.clamp(60.5, 99.5)) - 0.5;
+            assert!((off - truth).abs() < 0.1, "{off} off the shore at {k} degrees where it is {truth}");
+        }
+
+        // Behind the island the shelter fades out smoothly past the corner,
+        // with no step where one of the lines looked along clears the land.
+        let mut s = settings(w, l);
+        (s.waves.direction, s.waves.irregularity) = (0.0, 0.0);
+        let field = WaveField::with(&s.waves, &Tuning::default().waves);
+        let shore = Shore::new(&land, &field, s.waves.height, &Tuning::default().near_land, &Tuning::default().outflow, None, 1.0, &Progress::none(), (0.0, 1.0)).unwrap();
+        for x in [120, 160, 200] {
+            let along: Vec<(f64, f64)> = (60..200).map(|z| (shore.near(x, z).long, shore.near(x, z).short)).collect();
+            let step = along.windows(2).map(|p| (p[1].0 - p[0].0).abs().max((p[1].1 - p[0].1).abs())).fold(0.0, f64::max);
+            // The edge of the shelter is soft but can be steep close behind
+            // the island; a seam left by one line would be a jump on its own.
+            // A three block march trades a little smoothness for speed, so
+            // the reading wobbles by a few hundredths from column to column.
+            assert!(step < 0.1, "the shelter jumps by {step} between neighbours at x = {x}");
+            // A soft shelter field is wider than a sharp one was, so the
+            // test asks only that the water behind the island is clearly
+            // calmer than open water: a fifth of the height gone at 20
+            // blocks behind, and nearly all of it back clear of the island.
+            assert!(along[20].0 + 0.15 < along[139].0 && along[139].0 > 0.95, "shelter {:?} behind and {:?} clear of the island", along[20], along[139]);
+        }
     }
 
     #[test]
@@ -328,6 +390,9 @@ mod tests {
         // Waves come in at an angle to a beach that shelves up toward +Z.
         s.waves.direction = 40.0;
         s.waves.irregularity = 0.0;
+        // Spray lifts blocks of its own against the shore; this test is about
+        // the swell of the waves alone.
+        s.look.spray = 0.0;
         let depth_at = |z: i32| 30.0 - 30.0 * z as f32 / 130.0;
         let height: Vec<f32> = (0..w * l).map(|i| -depth_at(i / w)).collect();
         let land = Terrain::from_heights(w, l, -10, height, vec![Ground::Sand; (w * l) as usize]);
@@ -793,7 +858,7 @@ mod tests {
         };
         // The sea in front of the cliff is the waves coming and going; in
         // front of the beach, and far out, it is as it was.
-        let (cliff, rocky, beach) = (changed(150..190, 84..100), changed(250..290, 84..100), changed(60..100, 84..100));
+        let (cliff, rocky, beach) = (changed(140..200, 80..104), changed(250..290, 84..100), changed(60..100, 84..100));
         assert!(cliff > 60, "{cliff} columns changed before the cliff");
         assert!(rocky < cliff, "{rocky} before the rocks, {cliff} before the cliff");
         assert_eq!(beach, 0);

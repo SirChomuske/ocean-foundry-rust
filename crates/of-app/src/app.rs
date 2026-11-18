@@ -420,6 +420,18 @@ impl OceanFoundryApp {
         let accent = theme::accent(mode);
         let mut bake = false;
         ui.horizontal_centered(|ui| {
+            // The bar's buttons sit on the window frame rather than on a card,
+            // so they get a fill of their own: thin tints read as nothing there.
+            let fill = theme::bar_control();
+            let widgets = &mut ui.visuals_mut().widgets;
+            for style in [&mut widgets.inactive, &mut widgets.open, &mut widgets.noninteractive] {
+                style.bg_fill = fill;
+                style.weak_bg_fill = fill;
+            }
+            widgets.hovered.bg_fill = theme::bar_control_hover();
+            widgets.hovered.weak_bg_fill = theme::bar_control_hover();
+            widgets.active.bg_fill = theme::bar_control_active();
+            widgets.active.weak_bg_fill = theme::bar_control_active();
             ui.add_space(6.0);
             ui.label(RichText::new(self.t("app.title")).font(theme::semibold(16.0)).color(theme::text_strong()));
             ui.add_space(14.0);

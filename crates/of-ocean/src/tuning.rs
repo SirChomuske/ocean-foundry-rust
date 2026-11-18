@@ -18,8 +18,12 @@ pub const TUNING_BACKUP: &str = "ocean-tuning.previous.json";
 /// steepness with foam trails, waves bending and sheltering near land.
 /// 3: colour led by the direction of the sun. 4: the water runs between a
 /// chosen dark and light colour (no shade or thin-water colours worked out
-/// from one water colour), and "Daylight" 0 is black.
-pub const TUNING_VERSION: u32 = 4;
+/// from one water colour), and "Daylight" 0 is black. 5: the crests bend as
+/// they travel (wander), the sea a shore throws back reaches a quarter of a
+/// peak length and is spread out, the current runs faster where two shores
+/// squeeze it and draws its foam out, and a fast current keeps more of the
+/// foam it drags.
+pub const TUNING_VERSION: u32 = 5;
 
 /// The open sea: a wave spectrum sampled as many small waves.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -62,6 +66,12 @@ pub struct WaveTuning {
     /// How far full "Crest sharpness" moves the water toward the crests: 1
     /// is a true trochoid.
     pub chop_most: f64,
+    /// How far the crests wander sideways from the straight lines a sum of
+    /// plane waves would make, as a share of the peak wavelength. Waves in a
+    /// row of parallel ridges read as a pattern; a real sea bends.
+    pub wander: f64,
+    /// Over how many peak wavelengths a bend comes and goes.
+    pub wander_size: f64,
     /// Sharpening stops before the steepest crests fold over: 1 would let
     /// them become cusps.
     pub cusp_limit: f64,
@@ -83,6 +93,8 @@ impl Default for WaveTuning {
             tone_smoothing: 0.06,
             tone_smoothing_least: 1.5,
             chop_most: 1.0,
+            wander: 0.35,
+            wander_size: 1.6,
             cusp_limit: 0.8,
         }
     }
@@ -125,7 +137,7 @@ impl Default for NearLandTuning {
             depth_smoothing: 2,
             least_depth: 0.6,
             slowest: 3.0,
-            shelter_rays: 15,
+            shelter_rays: 10,
             shelter_fan: 60.0,
             shelter_reach: 12.0,
             bend_share: 0.15,
@@ -224,11 +236,18 @@ pub struct ReflectionTuning {
     /// How far out the returning waves are still seen, in lengths of the
     /// main wave: at this distance about a third is left.
     pub reach: f64,
+    /// How many blocks wide a square the wave thrown back by a shore is
+    /// spread over before it is added. A shore far off sends its wave home
+    /// with crests closer together than a block: the column of sea behind
+    /// the shore it is read from turns over many times between one column
+    /// of water and the next, and drawn as it stands that is a crease of
+    /// light lying across the waves. 0 adds it as it is.
+    pub soften: f64,
 }
 
 impl Default for ReflectionTuning {
     fn default() -> Self {
-        Self { cliff: 0.55, rocky: 0.2, beach: 0.0, reach: 0.8 }
+        Self { cliff: 0.55, rocky: 0.2, beach: 0.0, reach: 0.25, soften: 3.0 }
     }
 }
 
@@ -313,6 +332,40 @@ pub struct FlowTuning {
     /// A current slower than this many metres a second leaves no foam; at
     /// three times this it leaves all of it.
     pub foam_from: f64,
+    /// How much the white water at a struck shore is raised by the speed of
+    /// the current that strikes it, on top of what the shore gives on its
+    /// own. Was 0.35 before it was found to flood a fast current's shores.
+    pub impact_bonus: f64,
+    /// How much white water a fast current is rid of at the faces it
+    /// strikes, as it reaches three times `foam_from`. A fast current already
+    /// breaks the sea white all around it, so those faces must not read as a
+    /// sheet painted on top of that. The trail it drags keeps its own cap:
+    /// that white wash is how a fast current reads.
+    pub fast_cap: f64,
+    /// How much faster the current runs where it is squeezed between two
+    /// shores, as a share of its open speed. The same water through a
+    /// smaller gap goes faster; 0 leaves the current even everywhere.
+    pub squeeze: f64,
+    /// How far to the side the room is measured, in blocks. Shores closer
+    /// together than twice this can squeeze the current between them.
+    pub squeeze_reach: f64,
+    /// How far foam is drawn out by a squeezed current, against how much
+    /// faster that current runs. 0 leaves the foam where it was made.
+    pub foam_stretch: f64,
+    /// How much of the foam a wake carries is stirred sideways into the water
+    /// beside it. Water behind an obstacle mixes out into the stream, so the
+    /// wake widens downwind.
+    pub mix: f64,
+    /// How many blocks to each side that stirring reaches.
+    pub mix_spread: f64,
+    /// How high the water stands where the land squeezes the stream, as a
+    /// share of the head the current has. A narrow way between two shores
+    /// runs the water faster and lifts it a little.
+    pub squeeze_lift: f64,
+    /// How much the current is stopped where it runs into a face that leaves
+    /// it no way on: the water piles up there and goes aside instead. 0 lets
+    /// it run on as if the face were not there.
+    pub stagnation: f64,
 }
 
 impl Default for FlowTuning {
@@ -335,6 +388,15 @@ impl Default for FlowTuning {
             foam_life: 14.0,
             foam_streak: [22.0, 3.0],
             foam_from: 1.0,
+            impact_bonus: 0.2,
+            fast_cap: 0.15,
+            squeeze: 1.0,
+            squeeze_reach: 8.0,
+            foam_stretch: 0.6,
+        mix: 0.5,
+        mix_spread: 3.0,
+        squeeze_lift: 0.5,
+            stagnation: 0.5,
         }
     }
 }

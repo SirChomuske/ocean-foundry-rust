@@ -72,9 +72,9 @@ const DARK: Palette = Palette {
     field: rgb(0x151517),
     hairline: white(22),
     hairline_strong: white(34),
-    control: white(24),
-    control_hover: white(36),
-    control_active: white(50),
+    control: white(46),
+    control_hover: white(62),
+    control_active: white(78),
     track: white(40),
     segment: rgb(0x5c5c61),
     text: rgb(0xeaeaef),
@@ -95,9 +95,9 @@ const LIGHT_PALETTE: Palette = Palette {
     field: rgb(0xffffff),
     hairline: black(20),
     hairline_strong: black(36),
-    control: black(15),
-    control_hover: black(26),
-    control_active: black(40),
+    control: black(34),
+    control_hover: black(48),
+    control_active: black(62),
     track: black(34),
     segment: rgb(0xffffff),
     text: rgb(0x1d1d1f),
@@ -109,6 +109,34 @@ const LIGHT_PALETTE: Palette = Palette {
     bad: rgb(0xd92d20),
     knob_shadow: black(46),
 };
+
+/// The fill behind the top bar's buttons: opaque, so the bar reads as
+/// controls rather than as letters floating on the window.
+pub(crate) fn bar_control() -> Color32 {
+    if is_light() {
+        rgb(0xd9d9df)
+    } else {
+        rgb(0x3d3d43)
+    }
+}
+
+/// The same, under the pointer.
+pub(crate) fn bar_control_hover() -> Color32 {
+    if is_light() {
+        rgb(0xcdcdd5)
+    } else {
+        rgb(0x4a4a51)
+    }
+}
+
+/// The same, held down or open.
+pub(crate) fn bar_control_active() -> Color32 {
+    if is_light() {
+        rgb(0xc0c0ca)
+    } else {
+        rgb(0x56565e)
+    }
+}
 
 fn palette() -> &'static Palette {
     if is_light() {

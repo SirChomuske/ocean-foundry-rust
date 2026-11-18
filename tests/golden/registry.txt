@@ -65,6 +65,11 @@ ocean.swell_direction | water | false | float 0..360 default 30 decimals 0
 ocean.metres_per_block | scene | false | float 0.25..4 default 1 decimals 2
 ocean.flow_speed | scene | false | float 0..10 default 0 decimals 1
 ocean.flow_direction | scene | false | float 0..360 default 0 decimals 0
+ocean.impact_foam | scene | false | float 0..1 default 0.5 decimals 2
+ocean.wake_foam | scene | false | float 0..1 default 0.5 decimals 2
+ocean.wake_length | scene | false | float 0..3 default 1 decimals 1
+ocean.wake_scale | scene | false | float 0.5..3 default 1 decimals 1
+ocean.spray | scene | false | float 0..1 default 0.5 decimals 2
 lava.width | scene | false | int 16..2048 default 128
 lava.length | scene | false | int 16..2048 default 128
 lava.placement_y | scene | false | int -64..319 default 32

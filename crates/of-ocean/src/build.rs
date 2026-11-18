@@ -5,419 +5,22 @@ use crate::blocks::{Blocks, Columns, Land, Reworked, Stack};
 use crate::colour::{self, Care, Matcher, NO_GLASS};
 use crate::flow::Flow;
 use crate::noise::{cell_edge, fbm, hash, lerp, smoothstep, value};
-use crate::pattern::{self, Pattern};
-use crate::render::Picture;
 use crate::shore::Shore;
 use crate::survey::Survey;
 use crate::terrain::{Ground, Terrain};
 use crate::tuning::Tuning;
-use crate::waves::{Near, WaveField, WaveSettings};
-use crate::zone::{Zone, Zones};
-use of_core::params::{self, ParamValues, Value};
+use crate::waves::{Near, WaveField};
+use crate::zone::Zones;
 use of_formats::catalogue::Catalogue;
 use of_formats::export::Layer;
 use of_formats::model::{BlockState, Palette};
 use of_formats::Progress;
 use std::collections::{BTreeMap, HashMap};
 
-/// How the water is coloured. See section 1.8 of the plan.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Look {
-    /// The water where little light reaches it: deep troughs, faces turned
-    /// from the sun, shadow, the whole sea under cloud. Any colour, black included.
-    pub dark: [u8; 3],
-    /// The water where the light catches it. Every column lies somewhere
-    /// between the two.
-    pub light: [u8; 3],
-    /// How much light there is altogether: 1 is full day, at 0 the sea is black.
-    pub daylight: f64,
-    /// How much sun there is: 0 is fully overcast and leaves the dark colour everywhere.
-    pub lit_strength: f64,
-    /// How directional the sunlight is: 0 tints every face evenly, 1 lets faces turned away fall toward the dark colour.
-    pub shading: f64,
-    /// How quickly a slope goes from shaded to fully lit.
-    pub contrast: f64,
-    /// Where level water in full sun sits between the dark and the light colour: 0.5 is half way.
-    pub midpoint: f64,
-    /// How dark the shadows are that land and tall waves cast on the water.
-    pub shadow: f64,
-    /// How far the edges of those shadows are blurred, in blocks.
-    pub shadow_softness: f64,
-    /// How much of the sea floor shows through shallow water.
-    pub clarity: f64,
-    /// Light thrown back by the surface itself, laid over the water's colour.
-    pub reflection: f64,
-    /// Reflections take a paler tint of the light colour rather than `reflection_colour`.
-    pub reflection_auto: bool,
-    pub reflection_colour: [u8; 3],
-    /// 0: a small sharp glint. 1: a broad soft sheen.
-    pub reflection_softness: f64,
-    /// Where the onlooker stands for whom the reflections are worked out, as for the sun.
-    pub view_azimuth: f64,
-    pub view_elevation: f64,
-    /// Where the sun stands, degrees. 0 is +X, 90 is +Z.
-    pub sun_azimuth: f64,
-    /// Height of the sun above the horizon, degrees.
-    pub sun_elevation: f64,
-    /// Extra sunlit tint in shallow water: 1 doubles it at the waterline, never past the lit colour.
-    pub depth_influence: f64,
-    /// Depth in blocks at which that extra tint has faded out.
-    pub depth_reach: f64,
-    /// Strength of the small ripples, which exist only as shading.
-    pub ripple: f64,
-    /// Amount of white water at shores and on the tallest crests. 0 removes it.
-    pub foam: f64,
-    /// Amount of foam left lying on the water: lace and wind streaks.
-    pub streaks: f64,
-    /// Stained glass layers over the water, 0 to 3.
-    pub glass_layers: u32,
-    /// Most solid block types the coloured surface may use.
-    pub max_solids: usize,
-    /// Most stained glass colours it may use.
-    pub max_glass: usize,
-    /// Strength of the dithering that blends neighbouring block colours.
-    pub dither: f64,
-    /// How the two colours of a blend are laid out, how many blocks across
-    /// one cell of that layout is, and the seed of the random layout.
-    pub dither_mode: Dither,
-    pub dither_grain: i32,
-    pub dither_seed: u32,
-    /// The colour of white water.
-    pub foam_colour: [u8; 3],
-}
-
-/// How dithering lays out the two block colours of a blend.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Dither {
-    /// No blending: clean bands.
-    Off,
-    /// Patches a few blocks across, drawn out along the crests.
-    Patches,
-    /// A fixed fine pattern.
-    Bayer,
-    /// A random scatter.
-    Noise,
-    /// Each block passes what it could not show on to the next
-    /// (Floyd-Steinberg).
-    Diffusion,
-}
-
-impl Default for Look {
-    fn default() -> Self {
-        Self {
-            dark: [17, 102, 176],
-            light: [104, 199, 233],
-            daylight: 1.0,
-            lit_strength: 0.85,
-            shading: 0.7,
-            contrast: 1.6,
-            midpoint: 0.5,
-            shadow: 0.7,
-            shadow_softness: 2.0,
-            clarity: 0.5,
-            reflection: 0.5,
-            reflection_auto: true,
-            reflection_colour: [217, 236, 245],
-            reflection_softness: 0.15,
-            view_azimuth: 225.0,
-            view_elevation: 35.0,
-            sun_azimuth: 45.0,
-            sun_elevation: 38.0,
-            depth_influence: 1.0,
-            depth_reach: 7.0,
-            ripple: 0.5,
-            foam: 0.5,
-            streaks: 0.0,
-            glass_layers: 3,
-            max_solids: 8,
-            max_glass: 4,
-            dither: 0.6,
-            dither_mode: Dither::Patches,
-            dither_grain: 1,
-            dither_seed: 1,
-            foam_colour: [238, 244, 248],
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct OceanSettings {
-    /// World X and Z of the plot's north-west corner.
-    pub origin: [i32; 2],
-    pub width: i32,
-    pub length: i32,
-    /// The Minecraft Y level the water rests at.
-    pub placement_y: i32,
-    pub waves: WaveSettings,
-    /// Filled to the base rather than a hollow shell.
-    pub filled: bool,
-    pub thickness: i32,
-    /// Dye colour of the foundation concrete.
-    pub foundation: String,
-    pub colour_glass: bool,
-    /// The size of one block in metres. Sets how fast the waves are for
-    /// their size, and so what a current does to them.
-    pub metres_per_block: f64,
-    /// A current through the sea: its speed in metres a second, and the
-    /// way it runs in degrees as for the waves.
-    pub flow_speed: f64,
-    pub flow_direction: f64,
-    pub look: Look,
-    /// Blocks the coloured surface may not use.
-    pub excluded: Vec<String>,
-    /// Blocks only to be had in creative mode may be used too.
-    pub creative_blocks: bool,
-    /// Where the small ripples in the shading come from.
-    pub pattern: Pattern,
-    /// A made-up sea floor for open sea with no terrain.
-    pub seabed: Option<Seabed>,
-    /// Calm water and keep-dry areas.
-    pub zones: Vec<Zone>,
-}
-
-/// A sea floor that is only imagined: it changes how deep the water looks
-/// and where waves break, never the blocks under the water.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Seabed {
-    /// Depth in blocks at the shallow edge.
-    pub shallowest: f64,
-    /// Blocks deeper for every block out from that edge.
-    pub slope: f64,
-    /// The way the floor falls away, degrees as for the waves.
-    pub direction: f64,
-}
-
-impl OceanSettings {
-    pub fn from_params(values: &ParamValues) -> Self {
-        let get = |id: &str| params::find(id).map(|d| values.get(d));
-        let num = |id: &str| match get(id) {
-            Some(Value::Float(x)) => x,
-            Some(Value::Int(i)) => i as f64,
-            _ => 0.0,
-        };
-        let choice = |id: &str| match get(id) {
-            Some(Value::Choice(c)) => c,
-            _ => String::new(),
-        };
-        Self {
-            origin: [0, 0],
-            width: num("ocean.width") as i32,
-            length: num("ocean.length") as i32,
-            placement_y: num("ocean.placement_y") as i32,
-            waves: WaveSettings {
-                height: num("ocean.wave_height"),
-                peak_distance: num("ocean.peak_distance"),
-                direction: num("ocean.direction"),
-                irregularity: num("ocean.irregularity"),
-                swell_detail: num("ocean.swell_detail"),
-                crest_sharpness: num("ocean.crest_sharpness"),
-                seed: num("ocean.seed") as u32,
-                moment: num("ocean.moment"),
-                swell_height: num("ocean.swell_height"),
-                swell_length: num("ocean.swell_length"),
-                swell_direction: num("ocean.swell_direction"),
-            },
-            filled: choice("ocean.build_style") == "filled",
-            thickness: (num("ocean.shell_thickness") as i32).max(1),
-            foundation: choice("ocean.foundation_colour"),
-            colour_glass: matches!(get("ocean.include_colour_glass"), Some(Value::Bool(true))),
-            metres_per_block: num("ocean.metres_per_block").max(0.01),
-            flow_speed: num("ocean.flow_speed"),
-            flow_direction: num("ocean.flow_direction"),
-            look: Look {
-                dark: params::parse_colour(&choice("ocean.dark_colour")).unwrap_or(Look::default().dark),
-                light: params::parse_colour(&choice("ocean.light_colour")).unwrap_or(Look::default().light),
-                daylight: num("ocean.daylight"),
-                lit_strength: num("ocean.lit_strength"),
-                shading: num("ocean.shading_strength"),
-                contrast: num("ocean.contrast"),
-                midpoint: num("ocean.shade_midpoint"),
-                shadow: num("ocean.shadow_strength"),
-                shadow_softness: num("ocean.shadow_softness"),
-                clarity: num("ocean.clarity"),
-                reflection: num("ocean.reflection_strength"),
-                reflection_auto: matches!(get("ocean.reflection_auto"), Some(Value::Bool(true))),
-                reflection_colour: params::parse_colour(&choice("ocean.reflection_colour")).unwrap_or(Look::default().reflection_colour),
-                reflection_softness: num("ocean.reflection_softness"),
-                view_azimuth: num("ocean.view_bearing"),
-                view_elevation: num("ocean.view_elevation"),
-                sun_azimuth: num("ocean.light_bearing"),
-                sun_elevation: num("ocean.light_elevation"),
-                depth_influence: num("ocean.depth_influence"),
-                depth_reach: num("ocean.depth_reach").max(0.5),
-                ripple: num("ocean.ripple_strength"),
-                foam: num("ocean.foam_amount"),
-                streaks: num("ocean.foam_streaks"),
-                glass_layers: num("ocean.glass_layers") as u32,
-                max_solids: num("ocean.max_solids") as usize,
-                max_glass: num("ocean.max_glass") as usize,
-                dither: num("ocean.dither_strength"),
-                dither_mode: match choice("ocean.dither_mode").as_str() {
-                    "off" => Dither::Off,
-                    "noise" => Dither::Noise,
-                    "diffusion" => Dither::Diffusion,
-                    "bayer" => Dither::Bayer,
-                    _ => Dither::Patches,
-                },
-                dither_grain: (num("ocean.dither_grain") as i32).max(1),
-                dither_seed: num("ocean.dither_seed") as u32,
-                foam_colour: params::parse_colour(&choice("ocean.foam_colour")).unwrap_or(Look::default().foam_colour),
-            },
-            excluded: Vec::new(),
-            creative_blocks: matches!(get("ocean.creative_blocks"), Some(Value::Bool(true))),
-            pattern: Pattern {
-                source: match choice("ocean.pattern_source").as_str() {
-                    "library" => pattern::Source::Library,
-                    "image" => pattern::Source::Image,
-                    "spectrum" => pattern::Source::Spectrum,
-                    _ => pattern::Source::Wind,
-                },
-                name: choice("ocean.pattern_name"),
-                spread: num("ocean.pattern_spread"),
-                peak: num("ocean.pattern_peak").max(1.0),
-                span: num("ocean.pattern_span").max(1.0),
-                strength: num("ocean.pattern_strength"),
-                rotation: num("ocean.pattern_rotation"),
-                invert: matches!(get("ocean.pattern_invert"), Some(Value::Bool(true))),
-                flip: match choice("ocean.pattern_flip_y").as_str() {
-                    "opengl" => pattern::FlipY::Up,
-                    "directx" => pattern::FlipY::Down,
-                    _ => pattern::FlipY::Auto,
-                },
-                image: None,
-            },
-            seabed: matches!(get("ocean.seabed"), Some(Value::Bool(true))).then(|| Seabed {
-                shallowest: num("ocean.seabed_shallowest").max(0.0),
-                slope: num("ocean.seabed_slope").max(0.0),
-                direction: num("ocean.seabed_direction"),
-            }),
-            zones: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct Stats {
-    pub water_columns: u64,
-    /// Blocks in each layer, in `Layer::ALL` order.
-    pub blocks: [u64; 6],
-    /// Every block used and how many, most used first.
-    pub used: Vec<(String, u64)>,
-    /// Lowest and highest water surface, in blocks relative to the resting level.
-    pub range: (i32, i32),
-    /// Water columns built as white water.
-    pub white_columns: u64,
-}
-
-pub struct Baked {
-    /// The blocks, kept as columns (see `blocks.rs`); `layers()` lays them out.
-    pub blocks: Blocks,
-    /// Height inside the build of the resting water level.
-    pub sea_level: i32,
-    /// World Y at which the build's y = 0 belongs, so the water rests at the chosen level.
-    pub export_y: i32,
-    pub width: i32,
-    pub length: i32,
-    /// Per column, the height inside the build of the top water block; `DRY` where there is none.
-    pub water_top: Vec<i32>,
-    /// Per column, the lowest water block.
-    pub water_bottom: Vec<i32>,
-    /// Per column, the colour the water was meant to have, and the colour
-    /// of the blocks chosen for it as they look from above. Empty when the
-    /// build has no coloured surface.
-    pub target: Vec<[u8; 3]>,
-    pub matched: Vec<[u8; 3]>,
-    /// What was worked out for each column on the way to its colour.
-    pub maps: Maps,
-    pub stats: Stats,
-}
-
-/// Per column, as `target`: empty when the build has no coloured surface.
-#[derive(Debug, Clone, Default)]
-pub struct Maps {
-    /// Depth of the water over the ground or the made-up sea floor;
-    /// infinite where there is neither.
-    pub depth: Vec<f32>,
-    /// White water, 0 to 255.
-    pub foam: Vec<u8>,
-    /// Share of the colour that is mirrored sky, 0 to 255.
-    pub sheen: Vec<u8>,
-}
-
-impl Baked {
-    /// The colour every column of water was meant to have (left) beside the
-    /// colour of the blocks chosen for it (right), from above with north up.
-    /// The difference between the two is what the blocks could not give.
-    pub fn colour_picture(&self, scale: u32) -> Option<Picture> {
-        if self.target.is_empty() {
-            return None;
-        }
-        let (w, l, s) = (self.width as u32, self.length as u32, scale.max(1));
-        let gap = 4 * s;
-        let (width, height) = (2 * w * s + gap, l * s);
-        let mut rgba = vec![255u8; (width * height * 4) as usize];
-        for (half, colours) in [&self.target, &self.matched].into_iter().enumerate() {
-            let left = half as u32 * (w * s + gap);
-            for z in 0..l {
-                for x in 0..w {
-                    let i = (z * w + x) as usize;
-                    let c = if self.water_top[i] == DRY { [203, 201, 195] } else { colours[i] };
-                    for py in z * s..(z + 1) * s {
-                        for px in left + x * s..left + (x + 1) * s {
-                            let at = ((py * width + px) * 4) as usize;
-                            rgba[at..at + 3].copy_from_slice(&c);
-                        }
-                    }
-                }
-            }
-        }
-        Some(Picture { width, height, rgba })
-    }
-}
-
-pub const DRY: i32 = i32::MIN;
-
-/// The tallest a build may stand, in blocks: the most a Minecraft world holds.
-pub const MOST_HEIGHT: i64 = 4064;
-
-/// The highest level anything reaches: the water and the glass over it, the
-/// ground, rock spanning over the water, and a build brought in as the land.
-fn height_reached(top: &[i32], ground: &[i32], terrain: Option<&Terrain>) -> i32 {
-    let mut highest = i32::MIN;
-    for (t, g) in top.iter().zip(ground) {
-        if *t != DRY {
-            highest = highest.max(t.saturating_add(3));
-        }
-        if *g != DRY {
-            highest = highest.max(*g);
-        }
-    }
-    if let Some(t) = terrain {
-        for z in 0..t.length {
-            for x in 0..t.width {
-                if let Some((_, high)) = t.roof(x, z) {
-                    highest = highest.max(high);
-                }
-            }
-        }
-        if let Some(p) = &t.placed {
-            highest = highest.max(p.shift[1].saturating_add(p.size[1] - 1));
-        }
-    }
-    highest
-}
-
-/// An error when a build reaching from `lowest` to `highest` is taller than
-/// a Minecraft world, as it only is when a height has gone wrong. Checked
-/// before any block is placed, so it fails at once and allocates nothing.
-pub(crate) fn tall_enough(lowest: i32, highest: i32) -> Result<(), String> {
-    let span = highest as i64 - lowest as i64 + 1;
-    if span > MOST_HEIGHT {
-        return Err(format!("the build would stand {span} blocks tall, more than a Minecraft world holds ({MOST_HEIGHT}); nothing was built"));
-    }
-    Ok(())
-}
-
+use crate::look::*;
+use crate::settings::*;
+pub use crate::baked::{Baked, Maps, Stats, DRY, MOST_HEIGHT};
+pub(crate) use crate::baked::{height_reached, tall_enough};
 const BAYER: [u8; 16] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 /// Fill `out` one row at a time on every processor core, reporting progress
@@ -496,7 +99,7 @@ pub fn bake_with(
     // Near land the waves slow, bend, find shelter and break.
     // A current through the sea, and what the land does to it.
     let flow = match terrain {
-        Some(t) => Flow::new(t, s.flow_speed, s.flow_direction, s.metres_per_block, &tuning.flow, progress, (0.0, 0.04))?,
+        Some(t) => Flow::new(t, s.flow_speed, s.flow_direction, s.metres_per_block, &tuning.flow, s.look.wake_length, s.look.wake_scale, progress, (0.0, 0.04))?,
         None => None,
     };
     let flow = flow.as_ref();
@@ -514,11 +117,14 @@ pub fn bake_with(
     let echo = &tuning.reflection;
     let echo_reach = echo.reach.max(0.01) * field.peak_length();
     // The height of the water and the same with its short waves smoothed away.
-    let surface_at = |x: i32, z: i32| -> (f64, f64) {
+    let surface_at = |x: i32, z: i32| -> (f64, f64, f64, f64) {
         let (wx, wz) = world(x, z);
         let near = shore.map_or(Near::OPEN, |s| s.near(x, z));
         let water = field.sample(wx, wz, &near);
         let (mut height, mut smooth) = (water.height, water.smooth);
+        // What the shores throw back, kept apart until it can be spread over
+        // the blocks the water has room to carry it in.
+        let (mut echo_height, mut echo_smooth) = (0.0, 0.0);
         // A steep shore throws waves back. The wave that returns from a
         // shore is the arriving wave as it would be at the same distance
         // behind the shore, so that is where it is looked up.
@@ -528,8 +134,10 @@ pub fn bake_with(
             let thrown = share.clamp(0.0, 1.0) * firm * (-sv.off(x, z).max(0.0) / echo_reach).exp();
             if thrown > 0.02 {
                 let back = field.sample(wx + way.0, wz + way.1, &near);
-                height += thrown * back.height;
-                smooth += thrown * back.smooth;
+                echo_height = thrown * back.height;
+                echo_smooth = thrown * back.smooth;
+                height += echo_height;
+                smooth += echo_smooth;
             }
         }
         // Water piled up and drawn down by a current, and the standing
@@ -543,28 +151,86 @@ pub fn bake_with(
             let left = zones.calm(x, z);
             height *= left;
             smooth *= left;
+            echo_height *= left;
+            echo_smooth *= left;
         }
-        (height, smooth)
+        (height, smooth, echo_height, echo_smooth)
     };
     // Worked out once for every column and a one-block rim, which the
     // slopes at the edge of the plot need.
     let rim = (w + 2) as usize;
-    let mut heights = of_core::memory::filled(rim * (l + 2) as usize, (0f64, 0f64))?;
+    let mut heights = of_core::memory::filled(rim * (l + 2) as usize, (0f64, 0f64, 0f64, 0f64))?;
     fill_rows(&mut heights, rim, progress, (0.15, 0.45), &|row, cells| {
         for (i, cell) in cells.iter_mut().enumerate() {
             *cell = surface_at(i as i32 - 1, row as i32 - 1);
         }
     })?;
+    // A wave thrown back from a far shore comes home with crests closer
+    // together than a block: the column of sea it is looked up behind moves
+    // by blocks between one column and the next, and the wave it finds
+    // there turns over many times over that distance. Drawn as it is, that
+    // is a crease of light lying across the waves wherever the two happen
+    // to come out of step. What the water can carry of it is the stretched
+    // out shape, so it is spread over a few blocks before it is added.
+    {
+        let spread = tuning.reflection.soften.max(0.0).round() as i32;
+        if spread > 0 {
+            let (wsize, lsize) = (rim as i32, (l + 2) as i32);
+            let mut across = vec![(0f64, 0f64); heights.len()];
+            for z in 0..lsize {
+                for x in 0..wsize {
+                    let (mut sh, mut ss, mut n) = (0f64, 0f64, 0f64);
+                    for d in -spread..=spread {
+                        let j = (z * wsize + (x + d).clamp(0, wsize - 1)) as usize;
+                        sh += heights[j].2;
+                        ss += heights[j].3;
+                        n += 1.0;
+                    }
+                    across[(z * wsize + x) as usize] = (sh / n, ss / n);
+                }
+            }
+            for z in 0..lsize {
+                for x in 0..wsize {
+                    let (mut sh, mut ss, mut n) = (0f64, 0f64, 0f64);
+                    for d in -spread..=spread {
+                        let j = ((z + d).clamp(0, lsize - 1) * wsize + x) as usize;
+                        sh += across[j].0;
+                        ss += across[j].1;
+                        n += 1.0;
+                    }
+                    let k = (z * wsize + x) as usize;
+                    heights[k].0 += sh / n - heights[k].2;
+                    heights[k].1 += ss / n - heights[k].3;
+                }
+            }
+        }
+    }
     let surface = |x: i32, z: i32| heights[(z + 1) as usize * rim + (x + 1) as usize].0;
     let smooth = |x: i32, z: i32| heights[(z + 1) as usize * rim + (x + 1) as usize].1;
+
 
     // ---- Shape: where the water stands, relative to the resting level.
     let mut top = vec![DRY; cells];
     let mut ground = vec![DRY; cells];
+    let mut spray = vec![0f32; cells];
     for z in 0..l {
         for x in 0..w {
             let i = at(x, z);
             let mut level = surface(x, z).round() as i32;
+            // A wave breaking on the shore throws up a crest taller than
+            // the swell it came from: the white water leaps as it meets
+            // the rock, instead of only lying on the surface.
+            let mut splash = 0.0f64;
+            if let Some(sh) = shore {
+                let hit = sh.surf(x, z) as f64;
+                if hit > 0.02 && s.look.spray > 0.0 && surface(x, z) > 0.0 {
+                    let (wx, wz) = world(x, z);
+                    let grain = 0.5 + 0.5 * crate::noise::fbm(wx / 5.0, wz / 5.0, s.waves.seed ^ 0x5EA1, 2);
+                    splash = (s.look.spray.clamp(0.0, 1.0) * hit * grain * 2.0).clamp(0.0, 1.0);
+                    level += (splash * 2.5).round() as i32;
+                }
+            }
+            spray[i] = splash as f32;
             // Under an arch the water and its glass stay clear of the rock.
             if let Some((lowest, _)) = terrain.and_then(|t| t.roof(x, z)) {
                 level = level.min(lowest - 4);
@@ -1304,7 +970,16 @@ pub fn bake_with(
                         // Foam is most broken up among rocks.
                         let whole = 0.35 + 0.25 * (1.0 - rocky);
                         let patch = whole + (1.0 - whole) * (0.5 + 0.5 * fbm(wx / size, wz / size, seed ^ 0xC33, 2));
-                        foam = foam.max(strength * struck * (1.0 - (dist - 1.0) / reach.max(0.01)).clamp(0.0, 1.0) * patch);
+                        let mut shore_foam = strength * struck * (1.0 - (dist - 1.0) / reach.max(0.01)).clamp(0.0, 1.0) * patch;
+                        if let Some(f) = flow {
+                            // Waves raised by the current break harder on the
+                            // shore they meet, and "Collision white water"
+                            // trims the white water there.
+                            let fast = smoothstep(tuning.flow.foam_from, 3.0 * tuning.flow.foam_from, f.speed);
+                            let push = (f.strike(x, z) * 2.0).clamp(0.0, 1.0);
+                            shore_foam *= (1.0 + tuning.flow.impact_bonus.max(0.0) * fast * push) * lerp(1.0, look.impact_foam.clamp(0.0, 1.0) * 2.0, push);
+                        }
+                        foam = foam.max(shore_foam);
                     }
                     // A river's water shows paler where it runs out into the sea.
                     if let Some(s) = shore {
@@ -1317,21 +992,42 @@ pub fn bake_with(
                         foam = foam.max(edge.fall_strength.clamp(0.0, 1.0) * churned[i] as f64 * patch);
                     }
                 }
-                // White water where a current strikes land and in the
-                // slack water behind it, drawn out along the current.
+                // White water where a current strikes land, and the foam it
+                // drags away downstream. The struck face may go solid white;
+                // the trail may not, or it reads as a sheet pasted on the sea.
+                // A fast current already breaks the sea white all around it,
+                // so the faces it strikes are capped lower as it speeds up.
+                // The trail keeps its own cap: that white wash is how a fast
+                // current reads behind what the water runs past.
+                let fast = flow.map_or(0.0, |f| smoothstep(tuning.flow.foam_from, 3.0 * tuning.flow.foam_from, f.speed));
+                let fast_cap = (1.0 - tuning.flow.fast_cap.clamp(0.0, 1.0) * fast).clamp(0.0, 1.0);
+                let mut carried = 0.0f64;
+                let mut broken = 0.0f64;
                 if let Some(f) = flow {
-                    let churn = f.churn(x, z);
-                    if churn > 0.0 {
-                        let size = tuning.flow.foam_streak;
-                        let (down, aside) = (wx * f.toward.0 + wz * f.toward.1, wz * f.toward.0 - wx * f.toward.1);
-                        let drawn = 0.5 + 0.5 * fbm(down / size[0].max(1.0), aside / size[1].max(1.0), seed ^ 0xF10A, 2);
-                        foam = foam.max(churn * (0.35 + 0.65 * drawn));
+                    let size = tuning.flow.foam_streak;
+                    let (down, aside) = (wx * f.toward.0 + wz * f.toward.1, wz * f.toward.0 - wx * f.toward.1);
+                    let drawn = 0.5 + 0.5 * fbm(down / size[0].max(1.0), aside / size[1].max(1.0), seed ^ 0xF10A, 2);
+                    let struck = f.strike(x, z);
+                    if struck > 0.0 {
+                        // A fast current already breaks the sea white all
+                        // around it, so the faces it strikes are capped lower
+                        // and left to the sea's own foam to finish.
+                        let face = look.impact_foam.clamp(0.0, 1.0) * 2.0 * fast_cap;
+                        foam = foam.max(struck * face * (0.5 + 0.5 * drawn));
+                    }
+                    let away = f.wake(x, z);
+                    if away > 0.0 {
+                        let tail = look.wake_foam.clamp(0.0, 1.0) * 2.0;
+                        carried = away * tail * (0.15 + 0.85 * drawn);
+                        // How the trail breaks up along the current.
+                        broken = (0.5 + 0.7 * fbm(down / (0.35 * size[0]).max(1.0), aside / size[1].max(1.0), seed ^ 0x7A11, 2)).clamp(0.0, 1.0);
                     }
                 }
                 // A crest that is breaking now, a struck shore and the foot
                 // of a fall can be solid white; foam left behind cannot.
                 let shown = |foam: f64| (foam * look.foam * paint.foam_gain).clamp(0.0, 1.0);
-                let amount = shown(foam).max(shown(trail).min(caps.trail_most.clamp(0.0, 1.0)));
+                let most = caps.trail_most.clamp(0.0, 1.0);
+                let amount = shown(foam).max(shown(trail).min(most));
                 // Churned water around the foam is paler than the sea, as
                 // far as there is sunlight to show it.
                 tint = (tint + direct * paint.aerated_tint * amount).min(2.0);
@@ -1383,6 +1079,20 @@ pub fn bake_with(
                 let threshold = lerp(paint.foam_grain.clamp(0.0, 1.0), 1.0, lerp(grain, drawn, paint.foam_streaks.clamp(0.0, 1.0)));
                 let spread = paint.foam_edge.max(1e-6);
                 let mut white = if amount > 0.0 { paint.foam_most.clamp(0.0, 1.0) * smoothstep(threshold - spread, threshold + spread, amount) } else { 0.0 };
+                // Foam the current drags away is foam left behind: capped
+                // below pure white, broken into strips along the current, and
+                // gone once it thins under the threshold, so the sea recovers
+                // downstream of land.
+                if carried > 0.0 {
+                    let need = lerp(paint.foam_grain.clamp(0.0, 1.0), 1.0, lerp(grain, broken, paint.foam_streaks.clamp(0.0, 1.0)));
+                    let lying = smoothstep(need - spread, need + spread, carried);
+                    // The trail keeps its own cap: what the current drags
+                    // away is the white wash the sea is read by, and a fast
+                    // current must still show it. Only the faces it strikes
+                    // are trimmed as it speeds up (see `fast_cap` above).
+                    let cap = spent.most.clamp(0.0, 1.0);
+                    white = white.max(paint.foam_most.clamp(0.0, 1.0) * cap * lying);
+                }
                 // Foam left behind: lace where a crest broke a wave or two
                 // ago, streaks where the wind has drawn it out.
                 let soft_edge = spent.edge.max(1e-6);
@@ -1396,6 +1106,11 @@ pub fn bake_with(
                     lying = lying.max(smoothstep(needs - soft_edge, needs + soft_edge, has));
                 }
                 white = white.max(paint.foam_most.clamp(0.0, 1.0) * spent.most.clamp(0.0, 1.0) * lying);
+                // Leaping spray is white all the way through.
+                let leaping = spray[i] as f64;
+                if leaping > 0.12 {
+                    white = white.max(paint.foam_most.clamp(0.0, 1.0) * ((leaping - 0.12) / 0.88).powi(2));
+                }
                 lab = colour::mix(lab, foam_lab, white as f32);
                 let key = [(lab[0] * 160.0).round() as i16, (lab[1] * 160.0).round() as i16, (lab[2] * 160.0).round() as i16];
                 // White water is sparse but catches the eye, so it counts for

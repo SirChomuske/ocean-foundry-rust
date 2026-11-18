@@ -129,50 +129,72 @@ pub struct Survey {
 }
 
 /// Distance of every column from the nearest marked one, and which that is.
-fn distances(width: usize, length: usize, marked: &dyn Fn(usize) -> bool) -> (Vec<f32>, Vec<u32>) {
+///
+/// Each column takes, from its neighbours, the marked column nearest to
+/// them, and measures its own straight-line distance to it. Adding up steps
+/// between neighbours instead would give distances that grow in octagons
+/// rather than circles, whose slope turns in jumps at the diagonals from
+/// every corner of the land; the waves thrown back off a shore follow that
+/// slope and would show the jumps as creases.
+pub(crate) fn distances(width: usize, length: usize, marked: &dyn Fn(usize) -> bool) -> (Vec<f32>, Vec<u32>) {
     let count = width * length;
     let mut away = vec![f32::INFINITY; count];
     let mut from = vec![u32::MAX; count];
     for i in (0..count).filter(|i| marked(*i)) {
         (away[i], from[i]) = (0.0, i as u32);
     }
-    const DIAGONAL: f32 = 1.414;
-    let pass = |i: usize, n: usize, step: f32, away: &mut Vec<f32>, from: &mut Vec<u32>| {
-        if away[n] + step < away[i] {
-            (away[i], from[i]) = (away[n] + step, from[n]);
+    let pass = |i: usize, n: usize, away: &mut Vec<f32>, from: &mut Vec<u32>| {
+        let site = from[n];
+        if site == u32::MAX || site == from[i] {
+            return;
+        }
+        let (dx, dz) = ((i % width) as f32 - (site as usize % width) as f32, (i / width) as f32 - (site as usize / width) as f32);
+        let d = dx.hypot(dz);
+        if d < away[i] {
+            (away[i], from[i]) = (d, site);
         }
     };
-    for z in 0..length {
-        for x in 0..width {
-            let i = z * width + x;
-            if x > 0 {
-                pass(i, i - 1, 1.0, &mut away, &mut from);
-            }
-            if z > 0 {
-                pass(i, i - width, 1.0, &mut away, &mut from);
+    // Two sweeps each way: the second catches the few columns whose nearest
+    // marked column reached them only round a corner of the first.
+    for _ in 0..2 {
+        for z in 0..length {
+            for x in 0..width {
+                let i = z * width + x;
                 if x > 0 {
-                    pass(i, i - width - 1, DIAGONAL, &mut away, &mut from);
+                    pass(i, i - 1, &mut away, &mut from);
                 }
-                if x + 1 < width {
-                    pass(i, i - width + 1, DIAGONAL, &mut away, &mut from);
+                if z > 0 {
+                    pass(i, i - width, &mut away, &mut from);
+                    if x > 0 {
+                        pass(i, i - width - 1, &mut away, &mut from);
+                    }
+                    if x + 1 < width {
+                        pass(i, i - width + 1, &mut away, &mut from);
+                    }
                 }
+            }
+            for x in (0..width.saturating_sub(1)).rev() {
+                pass(z * width + x, z * width + x + 1, &mut away, &mut from);
             }
         }
-    }
-    for z in (0..length).rev() {
-        for x in (0..width).rev() {
-            let i = z * width + x;
-            if x + 1 < width {
-                pass(i, i + 1, 1.0, &mut away, &mut from);
-            }
-            if z + 1 < length {
-                pass(i, i + width, 1.0, &mut away, &mut from);
+        for z in (0..length).rev() {
+            for x in (0..width).rev() {
+                let i = z * width + x;
                 if x + 1 < width {
-                    pass(i, i + width + 1, DIAGONAL, &mut away, &mut from);
+                    pass(i, i + 1, &mut away, &mut from);
                 }
-                if x > 0 {
-                    pass(i, i + width - 1, DIAGONAL, &mut away, &mut from);
+                if z + 1 < length {
+                    pass(i, i + width, &mut away, &mut from);
+                    if x + 1 < width {
+                        pass(i, i + width + 1, &mut away, &mut from);
+                    }
+                    if x > 0 {
+                        pass(i, i + width - 1, &mut away, &mut from);
+                    }
                 }
+            }
+            for x in 1..width {
+                pass(z * width + x, z * width + x - 1, &mut away, &mut from);
             }
         }
     }
@@ -300,6 +322,52 @@ impl Survey {
                     firm[i] = smoothstep(0.3, 0.8, steep) as f32;
                 }
             }
+        }
+        // Half-way between two shores the distance field turns a corner, and
+        // the column of sea a wave comes back from jumps across it. Left
+        // sharp, that jump is a crease in the water a block wide, running
+        // across the whole stretch the two shores share; it shows in the
+        // picture as a hair of light lying across the waves. The image is
+        // spread over a few blocks here instead, so the sea turns from one
+        // shore's answer to the other's over a stretch rather than at a line.
+        {
+            let (wsize, lsize) = (w.max(1) as i32, l.max(1) as i32);
+            let spread = |mirror: &mut Vec<(f32, f32)>, firm: &mut Vec<f32>| {
+                let mut temp = vec![(0f32, 0f32); count];
+                let mut temp_firm = vec![0f32; count];
+                let radius = 3;
+                for z in 0..lsize {
+                    for x in 0..wsize {
+                        let (mut sx, mut sz, mut sf, mut n) = (0f32, 0f32, 0f32, 0f32);
+                        for d in -radius..=radius {
+                            let j = (z * wsize + (x + d).clamp(0, wsize - 1)) as usize;
+                            sx += mirror[j].0;
+                            sz += mirror[j].1;
+                            sf += firm[j];
+                            n += 1.0;
+                        }
+                        let k = (z * wsize + x) as usize;
+                        temp[k] = (sx / n, sz / n);
+                        temp_firm[k] = sf / n;
+                    }
+                }
+                for z in 0..lsize {
+                    for x in 0..wsize {
+                        let (mut sx, mut sz, mut sf, mut n) = (0f32, 0f32, 0f32, 0f32);
+                        for d in -radius..=radius {
+                            let j = ((z + d).clamp(0, lsize - 1) * wsize + x) as usize;
+                            sx += temp[j].0;
+                            sz += temp[j].1;
+                            sf += temp_firm[j];
+                            n += 1.0;
+                        }
+                        let k = (z * wsize + x) as usize;
+                        mirror[k] = (sx / n, sz / n);
+                        firm[k] = sf / n;
+                    }
+                }
+            };
+            spread(&mut mirror, &mut firm);
         }
 
         let channel = channels(w, l, &wet, &to_land);

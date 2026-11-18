@@ -163,6 +163,8 @@ fn main() -> ExitCode {
         Some("testruns") if args.len() == 2 => ocean::test_runs(&args[1]),
         Some("estimate") if args.len() >= 2 => ocean::estimate(&args[1], &args[2..]),
         Some("testbuild") if args.len() >= 2 => ocean::test_build(&args[1], args.get(2).and_then(|v| v.parse().ok()).unwrap_or(96)),
+        #[cfg(feature = "dev")]
+        Some("pair") if args.len() >= 2 => ocean::pair_build(&args[1], args.get(2).and_then(|v| v.parse().ok()).unwrap_or(40), args.get(3).and_then(|v| v.parse().ok()).unwrap_or(120)),
         Some("stress") => files::stress(args.get(1).and_then(|v| v.parse().ok()).unwrap_or(512)),
         Some("catalogue") if args.len() >= 3 => {
             let height = |i: usize, default: i32| args.get(i).and_then(|v| v.parse().ok()).unwrap_or(default);

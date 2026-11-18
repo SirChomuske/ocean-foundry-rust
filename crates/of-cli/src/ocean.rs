@@ -82,6 +82,7 @@ fn produce(dir: &Path, name: &str, land: Land, assignments: &[&str]) -> Result<S
     let mut from_project: Option<SceneSetup> = None;
     let mut excluded: Vec<String> = Vec::new();
     let mut area: Option<[i32; 4]> = None;
+    let mut water_only = false;
     let mut pattern_image: Option<String> = None;
     // memory=report adds what each step and structure held (stage 1 of the column bake plan).
     let mut watch: Option<crate::mem::Watch> = None;
@@ -137,6 +138,8 @@ fn produce(dir: &Path, name: &str, land: Land, assignments: &[&str]) -> Result<S
             zones.push(Zone::parse(ZoneKind::Calm, text).map_err(|e| format!("calm=: {e}"))?);
         } else if let Some(text) = a.strip_prefix("dry=") {
             zones.push(Zone::parse(ZoneKind::Dry, text).map_err(|e| format!("dry=: {e}"))?);
+        } else if *a == "only=water" {
+            water_only = true;
         } else if *a == "memory=report" {
             watch = Some(crate::mem::Watch::start());
         } else if *a == "streams=none" {
@@ -383,6 +386,13 @@ fn produce(dir: &Path, name: &str, land: Land, assignments: &[&str]) -> Result<S
     if land != Land::Open {
         selections.push((Selection::WaterOnly, "-water-only"));
     }
+    if water_only {
+        // A build of its own already fills some of the cells the sea would
+        // write, and the complete export will not overwrite them. The water
+        // alone drops the terrain from what is written, so it can be pasted
+        // over the build it was made for.
+        selections = vec![(Selection::WaterOnly, "-water-only")];
+    }
     for (selection, suffix) in selections {
         for format in [Format::Litematic, Format::Sponge, Format::Axiom] {
             let options =
@@ -627,6 +637,93 @@ pub fn test_build(path: &str, height: i32) -> Result<(), String> {
     std::fs::write(path, bytes).map_err(|e| format!("cannot write {path}: {e}"))?;
     println!("Wrote {path}: a hollow figure {top} blocks tall, {blocks} blocks");
     Ok(())
+}
+
+/// The test build `pair_build` writes: a cube and a ball, the same size,
+/// a gap apart. Cells are stored in the region's own coordinates, which for
+/// a region whose box starts below zero are not zero-based - writing them
+/// zero-based lost all but the corner that happened to overlap
+/// (see `a_pair_keeps_every_block_it_was_given`).
+#[cfg(feature = "dev")]
+fn pair_model(size: i32, gap: i32) -> (of_formats::model::Build, i32, i32) {
+    use of_formats::model::{BlockState, Build, Region};
+    let size = size.clamp(8, 256);
+    let gap = gap.clamp(size, 512);
+    let half = size / 2;
+    let (left, right) = (-(gap / 2 + half), gap / 2 + half);
+    let (from_x, to_x) = (left - half - 1, right + half + 1);
+    let (from_z, to_z) = (-half - 1, half + 1);
+    let mut build = Build::new();
+    let id = build.palette.intern(BlockState::new("minecraft:white_concrete"));
+    let mut region = Region::new("pair", [from_x, 0, from_z], [to_x - from_x + 1, size + 1, to_z - from_z + 1]);
+    let mut cells = of_formats::model::Volume::new();
+    let ball = (right as f64, half as f64, 0.0);
+    let radius = half as f64;
+    let mut cube = 0i32;
+    let mut sphere = 0i32;
+    for y in 0..=size {
+        for z in from_z..=to_z {
+            for x in from_x..=to_x {
+                let in_cube = (x - left).abs() <= half && z.abs() <= half && y <= size;
+                let (dx, dy, dz) = (x as f64 - ball.0, y as f64 - ball.1, z as f64 - ball.2);
+                let in_sphere = dx * dx + dy * dy + dz * dz <= radius * radius;
+                if in_cube || in_sphere {
+                    if in_cube { cube += 1; } else { sphere += 1; }
+                    cells.set([x, y, z], id);
+                }
+            }
+        }
+    }
+    region.cells = Arc::new(cells);
+    build.regions.push(region);
+    build.meta.name = "pair".into();
+    (build, cube, sphere)
+}
+
+/// Write a test build of two obstacles in open water: a cube and a ball,
+/// the same size, a gap apart, so the wake each leaves can be compared.
+#[cfg(feature = "dev")]
+pub fn pair_build(path: &str, size: i32, gap: i32) -> Result<(), String> {
+    let (build, cube, sphere) = pair_model(size, gap);
+    let (bytes, _) = of_formats::write(&build, Format::Litematic, catalogue::default().data_version, &Progress::none()).map_err(|e| e.to_string())?;
+    std::fs::write(path, bytes).map_err(|e| format!("cannot write {path}: {e}"))?;
+    let size = size.clamp(8, 256);
+    let gap = gap.clamp(size, 512);
+    println!("Wrote {path}: a cube of {cube} blocks and a ball of {sphere} blocks, {size} across, {gap} apart");
+    Ok(())
+}
+
+#[cfg(all(test, feature = "dev"))]
+mod tests {
+    use super::*;
+
+    /// The pair build writes into a region whose box starts at a negative x
+    /// and z, so the cells must be stored where the region reads them, not
+    /// counted from zero: counting from zero kept only the corner of the box
+    /// that happened to overlap the build, and the file came out with a
+    /// quarter of its blocks.
+    #[test]
+    fn a_pair_keeps_every_block_it_was_given() {
+        let (build, cube, sphere) = pair_model(20, 40);
+        let region = &build.regions[0];
+        let mut kept = 0i64;
+        let mut least = [i32::MAX; 3];
+        let mut most = [i32::MIN; 3];
+        region.for_each(|p, id| {
+            if !build.palette.get(id).is_air() {
+                kept += 1;
+            }
+            for a in 0..3 {
+                least[a] = least[a].min(p[a]);
+                most[a] = most[a].max(p[a]);
+            }
+        });
+        assert_eq!(kept, cube as i64 + sphere as i64, "kept {kept} of {} blocks", cube + sphere);
+        // The bug this guards against lost everything outside the first
+        // quadrant, so the build has to reach past the origin on x and z.
+        assert!(least[0] < 0 && least[2] < 0, "blocks start below zero: {least:?}");
+        assert!(most[0] > 0 && most[2] > 0, "blocks reach above zero: {most:?}");
+    }
 }
 
 /// Write a set of test runs that show the generator at work: every scene

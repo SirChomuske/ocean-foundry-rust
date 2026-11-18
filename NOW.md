@@ -3,6 +3,14 @@
 > 交接看 [HANDOFF.md](HANDOFF.md)（当前状态、规则、代码地图、坑）；本文只是这一轮的施工日志。
 > 2026-11-17 的详细旧交接在 [HANDOFF-HISTORY.md](HANDOFF-HISTORY.md)。
 
+## 2026-11-19 07:2x 验收包刷新（本轮）
+- 发现：`target/renders/user2048-complete/` 那套验收文件是 05:55 用 05:25 的 dev 构建出的，而 `circ.rs`/tuning 的最后改动在 06:22 之后 ⇒ 比代码旧一版。
+- 用 06:58 的 dev CLI 重跑同一命令（原参数原样，`-CapMB 8192`）：215.8 s、峰值 4221 MB、**35,631,674** 方块（旧 35,628,610，+3064 ≈ 0.009%），白水 26.2% 不变。
+- 新旧 target 图差异只集中在建筑轮廓外一圈细边（delta 热图 `target/tmp/export-delta-heat.png`），符合 `squeeze_lift`/`mix` 的局部作用范围，海面大形未变。
+- 结构校验（自写 NBT 解析，不走 CLI）：`wake.litematic` region 2048×824×1024、调色板 369 态、BlockStates 长度 = ceil(volume×9/64) 完全一致；water-only 2048×54×1024、12 态、4 bit 一致。
+- `of-cli roundtrip` 对该文件不可用：35.6M 方块需要 >8 GB（先 4096 失败于 1.94 GB 分配，再 8192 失败于 6.71 GB 分配），是工具上限，不是文件问题。
+- NOW#4 白沫仍按用户「保持现状」不动；2048 验收仍等用户进游戏看。
+
 ## 用户当前要求（按优先级）
 1. ~~岸影射线扇硬边 / 水面细直划痕~~ — **已修，用户确认**（「the last one from cmp3 looks very good」）。
 2. ~~顶部按钮看不清~~ — **已改成不透明**（用户 2026-11-19 05:20 要求「直接让按钮背景不透明」）：`crates/of-app/src/app.rs` 的 `top_bar()` 进入时把 `visuals.widgets` 的 inactive/open/noninteractive/hovered/active 全换成 `theme::bar_control()`（Dark `#3d3d43` / hover `#4a4a51` / active `#56565e`；Light `#d9d9df` / `#cdcdd5` / `#c0c0ca`），不再依赖半透明 `control`；对照图 `target/tmp/bar-cmp.png`，已进 dev 包。

@@ -27,7 +27,9 @@ pub const TUNING_BACKUP: &str = "ocean-tuning.previous.json";
 /// 7: the wake keeps closer to what made it — its wedge fades at the sides
 /// and the crests that fan out are lost sooner — and the water is thrown up
 /// against a face the current strikes rather than only whitened on it.
-pub const TUNING_VERSION: u32 = 7;
+/// 8: crests bend around land instead of bunching up where a passage narrows,
+/// so a sea that came through a gap is the same length as the water beside it.
+pub const TUNING_VERSION: u32 = 8;
 
 /// The open sea: a wave spectrum sampled as many small waves.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -119,6 +121,10 @@ pub struct NearLandTuning {
     pub least_depth: f64,
     /// The most the crests can bunch up: 3 lets them come three times closer together.
     pub slowest: f64,
+    /// The most the crest delay may change from block to block along the run
+    /// of the waves: 0.12 shortens a wave by about a seventh and no more, so
+    /// the sea keeps its own length through a narrow passage.
+    pub arrival_slope: f64,
     /// Shelter is found by looking upwind along this many lines, fanned out
     /// by `shelter_fan` degrees to each side, up to `shelter_reach` main wavelengths.
     pub shelter_rays: u32,
@@ -141,6 +147,7 @@ impl Default for NearLandTuning {
             depth_smoothing: 2,
             least_depth: 0.6,
             slowest: 3.0,
+            arrival_slope: 0.12,
             shelter_rays: 10,
             shelter_fan: 60.0,
             shelter_reach: 12.0,

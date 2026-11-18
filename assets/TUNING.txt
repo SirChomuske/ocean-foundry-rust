@@ -83,6 +83,10 @@ depth_smoothing     Blocks over which the depth is averaged before the waves
 least_depth         Waves are slowed as if the water were never shallower.
 slowest             The most the crests can bunch up as they slow: 3 lets
                     them come three times closer together.
+arrival_slope       The most the crest delay may change from block to block
+                    along the run of the waves: 0.12 shortens a wave by about
+                    a seventh and no more, so the sea keeps its length
+                    through a narrow passage.
 shelter_rays        Shelter behind land is found by looking upwind along this
 shelter_fan         many lines, fanned out by this many degrees to each side,
 shelter_reach       up to this many main waves away.

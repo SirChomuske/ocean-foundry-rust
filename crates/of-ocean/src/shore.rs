@@ -283,6 +283,53 @@ impl Shore {
             })
             .collect();
         let mut lag: Vec<f32> = blurred(&held, row, soften).into_iter().map(|l| l as f32).collect();
+        // Where the delay changes fast along the run of the waves it pinches
+        // the crests together, and the water just out of a passage comes out
+        // shorter than the sea it came in from. Swell keeps its length through
+        // a gap, so the delay is held to a gentle slope along the run and left
+        // free to spread sideways, which bends the crests without shortening
+        // them.
+        let slope = tuning.arrival_slope.clamp(0.0, 0.9);
+        if slope > 0.0 && row > 1 && rows > 1 {
+            // Along the run of the waves, rounded to the grid: the crest
+            // delay is only allowed to climb or fall this much per block.
+            let (hx, hz) = heading;
+            let step: isize = if hz.abs() >= hx.abs() {
+                if hz > 0.0 { row as isize } else { -(row as isize) }
+            } else if hx > 0.0 {
+                1
+            } else {
+                -1
+            };
+            // Both sweeps have to be repeated: the second one moves the
+            // values the first one was measured against.
+            for _ in 0..4 {
+                for i in 0..count {
+                    if land[i] {
+                        continue;
+                    }
+                    let prev = i as isize - step;
+                    if prev >= 0 && prev < count as isize && !land[prev as usize] {
+                        let upstream = lag[prev as usize] as f64;
+                        if lag[i] as f64 > upstream + slope {
+                            lag[i] = (upstream + slope) as f32;
+                        }
+                    }
+                }
+                for i in (0..count).rev() {
+                    if land[i] {
+                        continue;
+                    }
+                    let next = i as isize + step;
+                    if next >= 0 && next < count as isize && !land[next as usize] {
+                        let downstream = lag[next as usize] as f64;
+                        if lag[i] as f64 > downstream + slope {
+                            lag[i] = (downstream + slope) as f32;
+                        }
+                    }
+                }
+            }
+        }
         progress.step(span.0 + (span.1 - span.0) * 0.3).map_err(|p| p.key.to_string())?;
 
         // The fan of lines looked along, and how much of the sea each stands for.

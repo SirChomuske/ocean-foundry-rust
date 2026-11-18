@@ -24,6 +24,15 @@
 - 结论：**色调微调救不了实心白板**；建议结构改法——保持 26% 覆盖不变，把白沫打散成「沿流向的白色网络 + 蓝孔」并略降峰值白度。
 - 代码实验已 stash：`git stash@{0} "foam lighting experiment (unshipped)"`（TUNING_VERSION 6 + foam_shade/foam_form + lit 混色）；**工作树与 dist 都没动**，等用户选方向再落地。
 
+## 2026-11-19 08:4x-10:0x 白沫结构改法 / V 型打磨 / 浪花（本轮，已提交）
+- **白沫长条孔**（用户 08:3x 选「结构改法」：白网络+蓝孔，保覆盖）：`ColourTuning.foam_net`=0.85、`foam_net_size`=[13,7]；`build.rs` 在 spray 提白后用 `flow.fresh()` 门控（越靠障碍物孔越少，符合用户「靠近障碍物没多少破碎孔」），沿流向把格子拉长 3.2×，孔里只削 72% 白（留漂白浅蓝）。渲染 H 版 `target/renders/foam-h/foamH-*`（196.3 s、4220 MB、51 种方块）。
+- **V 型尾迹**（用户 08:5x「V 型打磨可以开始了」）：根因是 `flow.rs` 里 `smoothstep(0, 0.08, inside)` 只过渡 ~1.2°，以及 `wave_reach=4` 让发散波衰减 512 格。新增 `FlowTuning.wedge_soft`=0.35、`fan_reach`=1.6（另有试验档 0.6/1.2、0.7/0.9 走 `tuning=` JSON 免编译）。**定档 d：wedge_soft 0.7 / fan_reach 0.9 / wave_reach 2.2**（`target/tmp/tune-d.json`），球体图 `target/renders/vwake-new-b1/`，对照 `target/tmp/vwake-actual4.png`、`vw-diffstrip.png`；2048 三连差异（>8）：旧↔新默认 7.91%、旧↔软档 8.95%、新默认↔软档 2.13%。
+- **浪花**（用户 09:2x「浪花也算进去」）：`FlowTuning.splash_height`=6.0；`build.rs` 用 `f.strike()`（上游堆积场）× 快流 × fbm 颗粒决定抛水，`climb` 抬水面，另有 28% 概率的 `spout` 水柱（`leap` ≤5 格）。**TUNING_VERSION 6→7**。渲染 `target/renders/splash-2048/`（249.1 s、4219 MB，water-only +4,330 方块）、球体 `splash-ball2/`。
+- **位置争议（未改代码）**：用户 09:4x 斥「水花放到了尾迹一侧」。实测（`target/tmp/fielddump`，`tuning={"flow":{"splash_height":0}}` 对比 top 场）：球体 726 格抬高里**迎流 670 / 侧面 56 / 背流 0**，2048 场景 39,945 格里 18,893 迎流 vs 4,918 背流 ⇒ 几何位置本身对。真正原因是 `of-cli/src/ocean.rs:785` 的 map 是 north-up、3D 视图「seen from the south」，相机在背流侧；加上 build 多孔（水穿拱门），内面迎流从相机看像背面。
+- **GTA V 调研**（用户 09:4x「have a look at how GTA5 render their ocean waves and collision physics」）：水面=解析式逐帧波面，`GET_WATER_HEIGHT` 含波动逐帧变、`GET_WATER_HEIGHT_NO_WAVES` 稳定、`SET_DEEP_OCEAN_SCALER` 风暴只在玩家 ~200 m 内、`ADD_EXTRA_CALMING_QUAD` 最多 8 块平静水域；浪不与几何碰撞，浮力靠探针采样，飞溅/尾迹由实体粒子+路径贴花。已给用户 4 步「浪面驱动 splash」改法，**用户回「never mind, seems like it doesnt apply that much」→ 不改，按现状收尾**。
+- **验收包**：10:07 用最终 dev 构建重跑同一命令（`-CapMB 8192`）：267.2 s、峰值 4218 MB、**35,634,909** 方块（07:14 那版 35,631,674，+3235），water-only 10,920,113，51 种方块；日志 `20261119-100729-357-export-complete3`，产物仍在 `target/renders/user2048-complete/`。
+- **收尾**：`cargo test --release --workspace --features of-app/dev,of-cli/dev` 0 failed；回归先测到 **11/41 same**（30 张随白沫/V/浪花变化），按用户 08:5x「可以重录」重录基线（`run.sh update`，41 张），再跑 **41/41 same**（日志 `20261119-100051-413-regression-verify`）；`scripts/dev-build.ps1` 刷新 `dist/OceanFoundry-dev` 10:05；提交 **1b35443**「Cut thick foam into plates, soften the wake's far edges and throw water up a struck face」。
+
 ## 用户当前要求（按优先级）
 1. ~~岸影射线扇硬边 / 水面细直划痕~~ — **已修，用户确认**（「the last one from cmp3 looks very good」）。
 2. ~~顶部按钮看不清~~ — **已改成不透明**（用户 2026-11-19 05:20 要求「直接让按钮背景不透明」）：`crates/of-app/src/app.rs` 的 `top_bar()` 进入时把 `visuals.widgets` 的 inactive/open/noninteractive/hovered/active 全换成 `theme::bar_control()`（Dark `#3d3d43` / hover `#4a4a51` / active `#56565e`；Light `#d9d9df` / `#cdcdd5` / `#c0c0ca`），不再依赖半透明 `control`；对照图 `target/tmp/bar-cmp.png`，已进 dev 包。

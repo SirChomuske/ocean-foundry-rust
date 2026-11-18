@@ -33,6 +33,14 @@
 - **验收包**：10:07 用最终 dev 构建重跑同一命令（`-CapMB 8192`）：267.2 s、峰值 4218 MB、**35,634,909** 方块（07:14 那版 35,631,674，+3235），water-only 10,920,113，51 种方块；日志 `20261119-100729-357-export-complete3`，产物仍在 `target/renders/user2048-complete/`。
 - **收尾**：`cargo test --release --workspace --features of-app/dev,of-cli/dev` 0 failed；回归先测到 **11/41 same**（30 张随白沫/V/浪花变化），按用户 08:5x「可以重录」重录基线（`run.sh update`，41 张），再跑 **41/41 same**（日志 `20261119-100051-413-regression-verify`）；`scripts/dev-build.ps1` 刷新 `dist/OceanFoundry-dev` 10:05；提交 **1b35443**「Cut thick foam into plates, soften the wake's far edges and throw water up a struck face」。
 
+## 2026-11-19 10:4x Build 背后的直缝（Height 视图红圈）
+- 现象：福尔图恩庄园场景 Height 视图里，build 左下方一条淡淡的直线一直拉到画布边缘；V 型的臂不随距离化开。
+- 复现：`dist/OceanFoundry-dev/OceanFoundry-data/` 复制到 `target/tmp/line-scene/`，dev 包 headless 截图（`--show height --bake --screenshot ... --set ocean.width=768 --set ocean.length=1024`）。模板见 HANDOFF §6。
+- 根因：`crates/of-ocean/src/shore.rs` 的 arrival lag（绕行陆地的到达延迟）沿下游原样携带。波浪振幅会衰减，**相位位移不会**；在遮蔽边界处 lag 归零就成了阶跃，于是一条直缝贯穿到图边。排除项：`shelter_rays=90`、`shelter_reach=2.0` 都不影响长线；把 lag 临时置 0 重建后长线全消失 → 确认是 lag 相位缝。
+- 修法：lag 按离陆地距离在 3 个峰值波长内指数松开（`exp(-from_land/relax)`），再按 `peak_length/10`（1–8 格）做一次半径模糊（`blurred`，shore.rs:511）。注释写明了理由：相位位移不会随振幅衰减，不松开就永远是直缝。
+- 结果：`target/tmp/line-relax.png`；对比 `target/tmp/line-relax-compare.png`（baseline / relaxed / lag off 三联）、`target/tmp/line-near-compare.png`（近场：build 背后的阴影与扰动保留）。
+- 回归 **41/41 same**（回归场景没有 build 阴影，lag 恒 0，所以基线不用重录）；日志 `test-logs/runs/20261119-104619-543-lag-regression`。
+
 ## 用户当前要求（按优先级）
 1. ~~岸影射线扇硬边 / 水面细直划痕~~ — **已修，用户确认**（「the last one from cmp3 looks very good」）。
 2. ~~顶部按钮看不清~~ — **已改成不透明**（用户 2026-11-19 05:20 要求「直接让按钮背景不透明」）：`crates/of-app/src/app.rs` 的 `top_bar()` 进入时把 `visuals.widgets` 的 inactive/open/noninteractive/hovered/active 全换成 `theme::bar_control()`（Dark `#3d3d43` / hover `#4a4a51` / active `#56565e`；Light `#d9d9df` / `#cdcdd5` / `#c0c0ca`），不再依赖半透明 `control`；对照图 `target/tmp/bar-cmp.png`，已进 dev 包。

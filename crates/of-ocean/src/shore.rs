@@ -264,12 +264,25 @@ impl Shore {
         let short_slower = (field.peak_length() / field.short_length().max(1.0)).sqrt().max(1.0);
         let most = outflow.gain_most;
         let against = &against;
-        let mut lag: Vec<f32> = (0..count)
+        // A wave that went round land arrives late, and the delay it picked up
+        // is carried downstream as it is: the crests behind the land stay
+        // shifted as a whole, and the shift ends in a step where the sheltered
+        // water meets the open sea. That step rules a straight seam across the
+        // water to its edge, and no fading of the waves takes it away, because
+        // a shift of the crests is still a shift when the crests are small.
+        // The sea fills in behind land again, so the delay is let go of over a
+        // few wavelengths, and smoothed over a part of one so the crests bend
+        // back into the open sea instead of breaking off at a line.
+        let relax = 3.0 * field.peak_length().max(1.0);
+        let soften = ((field.peak_length() / 10.0).round() as usize).clamp(1, 8);
+        let held: Vec<f64> = (0..count)
             .map(|i| {
                 let along = (i % row) as f64 * heading.0 + (i / row) as f64 * heading.1;
-                if arrival[i].is_finite() { (arrival[i] - along).max(0.0) as f32 } else { 0.0 }
+                let hold = if arrival[i].is_finite() { (arrival[i] - along).max(0.0) } else { 0.0 };
+                hold * (-(from_land[i] as f64) / relax).exp()
             })
             .collect();
+        let mut lag: Vec<f32> = blurred(&held, row, soften).into_iter().map(|l| l as f32).collect();
         progress.step(span.0 + (span.1 - span.0) * 0.3).map_err(|p| p.key.to_string())?;
 
         // The fan of lines looked along, and how much of the sea each stands for.

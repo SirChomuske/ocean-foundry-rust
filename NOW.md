@@ -134,3 +134,13 @@
 - **测试**：workspace 全绿（of-ocean 50）。`calm_water...` 里 open roughness 的绝对下限 1.0→0.5（方向变窄后外海起伏变小，测试真正守的是“calm < 0.2×rough”）。
 - **回归 8/41 same**：spread 曲线动了所有外海画面，基线待用户同意后 `bash scripts/regression/run.sh update` 重录。
 - dev build 已刷新（03:00，含 1.35）。**代码未提交。**
+
+
+## 2026-11-20 05:2x 0.2.0 发布（本轮收尾）
+
+- 用户拍板：回归基线重录 + 做完 0.2.0；release 里**不带**他的设置与地图，用默认值。
+- 版本 0.1.0→**0.2.0**（workspace、6 个 crate 及互相依赖、README 中英版本说明与 zip 名、HANDOFF）。
+- 回归基线用 `bash scripts/regression/run.sh update` 重录 41 张，随后普通运行验证 **41/41 same**；`cargo test --workspace --release` 全绿。
+- 提交 `9044d90`「Hold the crest delay across the run and let the lee keep its whitecaps」。
+- `scripts/package.ps1` 打包：`dist/OceanFoundry-0.2.0-win64.zip`（25 MB，60 项）与 `dist/OceanFoundry-0.2.0-win64/`（48 MB）。内容只有两个 exe、licences、LICENSE、AUTHORS、README.txt 和 CLI 生成的 samples；**没有** `OceanFoundry-data`、他的 tuning/scene/litematic（扫描确认）。
+- dev build 已刷新到 0.2.0（05:19，dev features，md5 7a4bd61a…，与 package 用的 621ec458… 是不同 profile，属正常）。

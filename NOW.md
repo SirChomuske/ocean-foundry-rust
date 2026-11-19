@@ -113,3 +113,14 @@
 - 一律经 `scripts/capped-run.ps1`；后台烘焙时不要重建（exe 被占用）。
 - 诊断工具 `target/tmp/fielddump/`（独立 crate，dump top/depth/foam/sheen/target，512² 约 3.5 s）。
 - **参数顺序**：`ocean.*=value` 必须写在 `$(cat target/tmp/real-args.txt)` **之后**，否则被覆盖（已踩两次）。
+
+## 2026-11-19 13:0x 白沫物理：覆盖率跟风速吗（本轮，未改代码）
+
+用户问「白沫覆盖率跟的是风速 / 这个确认了嘛 / 涌浪也会造成白沫，但规模要够大速度够快 / 多找论文 / 我说的可能是错的，按流体力学来」。
+
+- 文献结论：W 与 U10 的强经验关系确认（Monahan & O'Muircheartaigh 1980：W=2.95e-6 U10^3.52，10/15/20 m/s ≈ 1/3.9/10.5%；Callaghan 2008 加风历史；Albert 2016 仍用 U10，全球均值 ~3.4%）。但物理解释是**陡度阈值**：破碎发生在波陡接近极限（ak≈0.44，Banner & Peregrine 1993），主波陡度决定破碎概率（Banner, Babanin & Young 2000），风只是把海面抬陡；wave age 与平均波坡解释 W 变率的 80-85%（PMC6209970）。涌浪同理：只有被推到极限（极大极快、对撞流、浅滩、与风浪叠加）才碎，普通涌浪远低于阈值。
+- 我们的场景（夏活群岛 1024²，wave_height 4 m，flow 0）：岛后 long 掉到 0.45-0.70、short 仍在 0.96-1.00、白沫 3.09%→0.6-0.8%。原因：阈值用**外海**的 spread 标定（steepness_deviation(ride)），涌浪被挡后陡度低于它，仍在的风浪永远不碎。
+- 首个修法（局部 spread 折算阈值，按 local_deviation/open_deviation）实验：岛后 0.67%→2.77%（对），但外海 3.02%→3.62%、中段 1.7%→4.6%（过度漂白），阈值尾部太敏感。补丁 target/tmp/wind-sea-fit.patch，git stash stash@{0}，**未上线、未进 dev**。
+- 设计三选一（详见 HANDOFF.md §8）：①coverage 落位 W_here=W_open×(0.25+0.75×short^1.7)（与 m02624 用户预期一致）；②局部 spread 重标定 cover_per_height/most_breaking 让外海仍 3.0%；③波影 through 随 distance 淡出（exp(-distance/(k·peak_length))，k≈3），顺带解决 V 跑到图边。
+- 另：arrival_slope 只压了沿流向，横向 lag 梯度仍 p99 5.38/max 52（m02702 看到的另一种压缩），计划 arrival_side。
+- HANDOFF.md 已重写 §1/§5/§6/§7，新增 §8 长文与 §9 history；本提交只动 NOW.md。dist dev 仍是 12:58 构建（2d3e2a3），不含白沫实验。

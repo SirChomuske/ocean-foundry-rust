@@ -569,6 +569,27 @@ pub fn bake_with(
         let cover = (spent.cover_per_height.max(0.0) * (s.waves.height * s.metres_per_block).max(0.0).powf(spent.cover_power)).min(spent.cover_most.clamp(0.0, 1.0));
         let windy = if look.streaks > 0.0 { (tail_point((cover * spent.breaking_share * look.streaks.min(1.0) * 2.0).clamp(1e-6, 0.5)) * deviation).max(spent.steepness_floor) } else { f64::MAX };
         let breaks_at = caps.breaking_steepness.max(0.01).min(windy).max(most) * lerp(1.0 + caps.foam_amount_sway, 1.0 - caps.foam_amount_sway, look.foam.clamp(0.0, 1.0));
+        // Land takes the swell out of the lee, but the wind that raised the
+        // sea is still blowing there, and the waves it raises still break.
+        // A lee is a smaller sea, not a still one: its whitecap cover falls
+        // with the spread of the water that is actually here, as the cover
+        // of the open sea falls with its height (W ∝ H^1.76). The threshold
+        // then comes from this sea's own spread rather than the open sea's,
+        // which counts a swell that has been hidden. Only where the open sea
+        // is calm enough for the flat minimum to be the rule does it stay.
+        let sway = lerp(1.0 + caps.foam_amount_sway, 1.0 - caps.foam_amount_sway, look.foam.clamp(0.0, 1.0));
+        let still = caps.breaking_steepness.max(0.01).min(windy);
+        let calm = most < still;
+        let least = caps.lee_foam_least.clamp(0.0, 1.0);
+        let power = caps.lee_foam_power.clamp(0.0, 8.0);
+        let from_at = |arriving: &Near| -> f64 {
+            let local = field.steepness_deviation_at(arriving, ride);
+            let kept = (local / deviation.max(1e-9)).clamp(0.0, 1.0);
+            let shade = least + (1.0 - least) * kept.powf(power);
+            let share = (caps.most_breaking.clamp(1e-6, 0.5) * shade).clamp(1e-6, 0.5);
+            let from = tail_point(share) * local;
+            (if calm { from.max(still) } else { from }) * sway
+        };
         let heading = field.heading();
         // Ripples from the library or an image, in place of the wind's.
         let pattern = s.pattern.ready(seed, heading);
@@ -639,7 +660,7 @@ pub fn bake_with(
                     }
                     let (wx, wz) = world(x, z);
                     let arriving = shore.map_or(Near::OPEN, |s| s.near(x, z));
-                    let from = breaks_at * (1.0 - caps.surf_ease.clamp(0.0, 0.95) * shore.map_or(0.0, |s| s.surf(x, z)));
+                    let from = from_at(&arriving) * (1.0 - caps.surf_ease.clamp(0.0, 0.95) * shore.map_or(0.0, |s| s.surf(x, z)));
                     let breaking = |ago: f64| smoothstep(from - soft, from + soft, field.steepness(wx, wz, ago, &arriving, ride));
                     let stagger = hash(s.origin[0] + x, s.origin[1] + z, seed ^ 0x5BE7) as f64 / (u32::MAX as f64 + 1.0);
                     let left = if zones.is_empty() { 1.0 } else { zones.calm(x, z) };
@@ -934,7 +955,7 @@ pub fn bake_with(
                         Some(d) => smoothstep(break_depth, 0.3 * break_depth, d),
                         None => shore.map_or(0.0, |s| s.surf(x, z)),
                     };
-                    let from = breaks_at * (1.0 - caps.surf_ease.clamp(0.0, 0.95) * surf);
+                    let from = from_at(&arriving) * (1.0 - caps.surf_ease.clamp(0.0, 0.95) * surf);
                     let breaking = |ago: f64| smoothstep(from - soft, from + soft, field.steepness(wx, wz, ago, &arriving, ride));
                     foam = breaking(0.0);
                     if moments > 0 {

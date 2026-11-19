@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/of-core", "crates/of-gpu", "crates/of-cli", "crates/of-app", "crates/of-formats", "crates/of-ocean"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 authors = ["sirchocoo"]

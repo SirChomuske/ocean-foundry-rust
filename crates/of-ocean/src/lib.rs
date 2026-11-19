@@ -278,7 +278,10 @@ mod tests {
         // The same square of sea, calmed; wide enough that the sea's own
         // bends cannot leave a patch sitting on a flat trough by luck.
         let (rough, calm) = (roughness(&open, 44..84, 44..84), roughness(&zoned, 44..84, 44..84));
-        assert!(rough > 1.0 && calm < 0.2 * rough, "calm water {calm} against {rough}");
+        // The open sea has bumps of its own. A narrow spread of directions
+        // leaves fewer of them, so this is a low floor rather than a
+        // measurement: what the test turns on is the drop against it.
+        assert!(rough > 0.5 && calm < 0.2 * rough, "calm water {calm} against {rough}");
         // Beyond the zones the sea is as it was.
         for z in 110..128 {
             for x in 110..128 {

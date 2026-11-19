@@ -124,3 +124,13 @@
 - 设计三选一（详见 HANDOFF.md §8）：①coverage 落位 W_here=W_open×(0.25+0.75×short^1.7)（与 m02624 用户预期一致）；②局部 spread 重标定 cover_per_height/most_breaking 让外海仍 3.0%；③波影 through 随 distance 淡出（exp(-distance/(k·peak_length))，k≈3），顺带解决 V 跑到图边。
 - 另：arrival_slope 只压了沿流向，横向 lag 梯度仍 p99 5.38/max 52（m02702 看到的另一种压缩），计划 arrival_side。
 - HANDOFF.md 已重写 §1/§5/§6/§7，新增 §8 长文与 §9 history；本提交只动 NOW.md。dist dev 仍是 12:58 构建（2d3e2a3），不含白沫实验。
+
+## 2026-11-20 03:0x 岛后白沫 + 浪脊密度（本轮，未提交）
+
+- **岛后白沫**（用户 m00645「compression 修好了」之后剩下的问题）：阈值改成跟“当前海况的 spread”——`from = tail_point(most_breaking * (least + (1-least)*kept^1.76)) * local_σ`，`kept = local_σ/open_σ` 夹 [0,1]，`least` 0.1。1024² 岛场景 mask：影区 0.67%→2.02%，外海 2.68%→2.81%；场景 bake 白水 1.2%→1.7%。先试过按 `short` 幅度折算（影区 3.53% > 外海 2.87%，过白），弃。
+- **压缩**：`near_land.arrival_side` 0.35 横向限坡，与 `arrival_slope` 0.12 交替 `held_back` 三次；两轴同时满足（dlag/dx p99 0.35、dlag/dz p99 0.12），长直白线车道消失。
+- **密度斑块**（用户 m00950「density difference between areas」）：经他拍板选“收窄方向扩散”，新增 `waves.spread_curve` 1.35（0.62 档位 ≈ 老 0.42 的浪向集中度）。试过 1.8 → 用户「large areas of flat, no good」。
+- **试过又撤掉**：`shadow_soft`（对 long/short 做掩膜 box blur，2.5λ 只有 5.9% 像素变化，肉眼无感）、`arrival_soft`（把延迟场预模糊到 1.5λ，会洗掉近岸浅滩延迟，`waves_shrink_and_turn_toward_a_beach` 在 ≥0.75 时失败；0.5 又暴露 shelter ray fan 的台阶）。两处代码均已回退，只留记录。
+- **测试**：workspace 全绿（of-ocean 50）。`calm_water...` 里 open roughness 的绝对下限 1.0→0.5（方向变窄后外海起伏变小，测试真正守的是“calm < 0.2×rough”）。
+- **回归 8/41 same**：spread 曲线动了所有外海画面，基线待用户同意后 `bash scripts/regression/run.sh update` 重录。
+- dev build 已刷新（03:00，含 1.35）。**代码未提交。**

@@ -1,6 +1,6 @@
 [package]
 name = "of-gpu"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 [dependencies]
 bytemuck = "1.25.2"
 log = "0.4.35"
-of-core = { version = "0.1.0", path = "../of-core" }
+of-core = { version = "0.2.0", path = "../of-core" }
 pollster = "1.0.1"
 rayon = "1.12.0"
 wgpu = "30"

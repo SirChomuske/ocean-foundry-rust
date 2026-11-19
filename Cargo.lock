@@ -1960,7 +1960,7 @@ dependencies = [
 
 [[package]]
 name = "of-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "eframe",
  "image",
@@ -1974,7 +1974,7 @@ dependencies = [
 
 [[package]]
 name = "of-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "image",
  "of-core",
@@ -1987,7 +1987,7 @@ dependencies = [
 
 [[package]]
 name = "of-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "log",
@@ -1997,7 +1997,7 @@ dependencies = [
 
 [[package]]
 name = "of-formats"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "flate2",
  "of-core",
@@ -2007,7 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "of-gpu"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "log",
@@ -2019,7 +2019,7 @@ dependencies = [
 
 [[package]]
 name = "of-ocean"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "flate2",
  "of-core",

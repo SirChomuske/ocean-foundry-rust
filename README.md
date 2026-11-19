@@ -11,7 +11,7 @@ Ocean Foundry 是一个便携、离线的 Windows 桌面应用。调好一片水
 *图中的教堂建筑由 B 站 UP 主 [伯亚](https://space.bilibili.com/399577290) 制作，导入 Ocean Foundry 作为预览场景。*
 *Cathedral build by [伯亚](https://space.bilibili.com/399577290) on Bilibili, imported into Ocean Foundry for this preview.*
 
-> **版本说明：** 这个仓库是 **Ocean Foundry 的 v0.1.0 Rust 版**，也是当前最新的版本。更早的 Python v1.3 版本在 [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry)。
+> **版本说明：** 这个仓库是 **Ocean Foundry 的 v0.2.0 Rust 版**，也是当前最新的版本。更早的 Python v1.3 版本在 [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry)。
 
 ## ⬇️ 下载
 
@@ -19,7 +19,7 @@ Ocean Foundry 是一个便携、离线的 Windows 桌面应用。调好一片水
 
 | 文件 | 内容 |
 |---|---|
-| `OceanFoundry-0.1.0-win64.zip` | Windows x64 便携版：GUI、CLI、示例建筑文件，以及三组开阔海面测试 |
+| `OceanFoundry-0.2.0-win64.zip` | Windows x64 便携版：GUI、CLI、示例建筑文件，以及三组开阔海面测试 |
 
 把整个文件夹解压出来，运行 `OceanFoundry.exe`。不要直接在 ZIP 里运行。
 
@@ -48,7 +48,7 @@ Ocean Foundry 是一个便携、离线的 Windows 桌面应用。调好一片水
 
 ## 快速开始
 
-1. 下载并解压 `OceanFoundry-0.1.0-win64.zip`。
+1. 下载并解压 `OceanFoundry-0.2.0-win64.zip`。
 2. 运行 `OceanFoundry.exe`。
 3. 选择 **Open sea** 或 **Your build**，设置范围和浪形。
 4. 预览满意后按 **Bake**。
@@ -80,7 +80,7 @@ cargo test --workspace --release
 pwsh -NoProfile -File scripts/package.ps1
 ```
 
-`package.ps1` 会跑测试、用 `+crt-static` 构建、整理便携文件夹，并生成 `dist/OceanFoundry-0.1.0-win64.zip`。
+`package.ps1` 会跑测试、用 `+crt-static` 构建、整理便携文件夹，并生成 `dist/OceanFoundry-0.2.0-win64.zip`。
 
 ## 项目结构
 
@@ -96,7 +96,7 @@ pwsh -NoProfile -File scripts/package.ps1
 
 ## 状态和限制
 
-- **v0.1.0**。这是早期版本；界面、文件布局和输出仍可能变化。
+- **v0.2.0**。这是早期版本；界面、文件布局和输出仍可能变化。
 - 目前只支持 Windows x64。
 - 导出的是静态建筑，游戏内放置需要手动完成。
 - 程序只写入自己的数据文件夹，以及你选择导出的路径。
@@ -130,7 +130,7 @@ Ocean Foundry is a portable, offline Windows desktop app. Shape a stretch of
 water, watch the simulation become a block build, freeze the moment you like,
 and export it as a Litematica, WorldEdit/Sponge or Axiom file.
 
-> **Version note:** this repository contains the **v0.1.0 Rust build**, the current version. The earlier Python v1.3 release lives at [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry).
+> **Version note:** this repository contains the **v0.2.0 Rust build**, the current version. The earlier Python v1.3 release lives at [SirChomuske/ocean-foundry](https://github.com/SirChomuske/ocean-foundry).
 
 ## ⬇️ Download
 
@@ -139,7 +139,7 @@ Grab the latest release from
 
 | File | What is inside |
 |---|---|
-| `OceanFoundry-0.1.0-win64.zip` | Portable Windows x64 build: GUI, CLI, sample build files and three open-sea test runs |
+| `OceanFoundry-0.2.0-win64.zip` | Portable Windows x64 build: GUI, CLI, sample build files and three open-sea test runs |
 
 Extract the **whole** folder and run `OceanFoundry.exe`. Do not run it from
 inside the ZIP.
@@ -181,7 +181,7 @@ executable. If that folder cannot be written to, the app uses
 
 ## Quick start
 
-1. Download and extract `OceanFoundry-0.1.0-win64.zip`.
+1. Download and extract `OceanFoundry-0.2.0-win64.zip`.
 2. Run `OceanFoundry.exe`.
 3. Choose **Open sea** or **Your build**, set the area and wave shape.
 4. Press **Bake** when the preview looks right.
@@ -218,7 +218,7 @@ pwsh -NoProfile -File scripts/package.ps1
 ```
 
 `package.ps1` runs the tests, builds with `+crt-static`, stages the portable
-folder and writes `dist/OceanFoundry-0.1.0-win64.zip`.
+folder and writes `dist/OceanFoundry-0.2.0-win64.zip`.
 
 ## Project layout
 
@@ -234,7 +234,7 @@ folder and writes `dist/OceanFoundry-0.1.0-win64.zip`.
 
 ## Status and limitations
 
-- **v0.1.0.** This is an early build; interfaces, file layout
+- **v0.2.0.** This is an early build; interfaces, file layout
   and output can still change.
 - Windows x64 only for now.
 - Exports are static builds; in-game placement is manual.

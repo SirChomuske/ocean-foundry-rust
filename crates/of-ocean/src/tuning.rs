@@ -29,7 +29,15 @@ pub const TUNING_BACKUP: &str = "ocean-tuning.previous.json";
 /// against a face the current strikes rather than only whitened on it.
 /// 8: crests bend around land instead of bunching up where a passage narrows,
 /// so a sea that came through a gap is the same length as the water beside it.
-pub const TUNING_VERSION: u32 = 8;
+/// 9: the crest delay is also held to a gentle slope across the run, so the
+/// edge of a shadow bends the crests instead of ruling a seam across the water.
+/// 10: foam in a lee keeps its share of whitecaps with the wind waves that
+/// are left there, and its threshold follows the spread of the sea that is
+/// actually present, so a shaded sea still breaks and shows white.
+/// 12: the wave directions bunch on a curve of "Irregularity" that keeps a
+/// half-irregular sea more orderly than a straight line from calm to wild
+/// does, so crests run in longer ridges instead of in patches.
+pub const TUNING_VERSION: u32 = 12;
 
 /// The open sea: a wave spectrum sampled as many small waves.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -48,6 +56,10 @@ pub struct WaveTuning {
     /// narrower: 300 gives long straight crests, 4 a confused sea.
     pub spread_at_calm: f64,
     pub spread_at_wild: f64,
+    /// How the wave directions bunch as "Irregularity" rises. 1 is a
+    /// straight line from calm to wild; above 1 keeps the sea more orderly
+    /// for longer, so a half-irregular sea still runs in long ridges.
+    pub spread_curve: f64,
     /// The short waves that "Swell detail" adds start at this multiple of
     /// the main wave frequency (1.5 is a wavelength of about 0.44).
     pub tail_from: f64,
@@ -91,6 +103,7 @@ impl Default for WaveTuning {
             narrowing_at_calm: 8.0,
             spread_at_calm: 300.0,
             spread_at_wild: 4.0,
+            spread_curve: 1.35,
             tail_from: 1.5,
             tail_energy: 0.2,
             tail_components: 0.35,
@@ -125,6 +138,11 @@ pub struct NearLandTuning {
     /// of the waves: 0.12 shortens a wave by about a seventh and no more, so
     /// the sea keeps its own length through a narrow passage.
     pub arrival_slope: f64,
+    /// The most the crest delay may change from block to block across the run.
+    /// Sideways the delay only tilts the crests instead of shortening them, so
+    /// a larger slope is tolerable; 0.35 still spreads the edge of a shadow
+    /// over a few blocks per block of delay rather than ruling a seam.
+    pub arrival_side: f64,
     /// Shelter is found by looking upwind along this many lines, fanned out
     /// by `shelter_fan` degrees to each side, up to `shelter_reach` main wavelengths.
     pub shelter_rays: u32,
@@ -148,6 +166,7 @@ impl Default for NearLandTuning {
             least_depth: 0.6,
             slowest: 3.0,
             arrival_slope: 0.12,
+            arrival_side: 0.35,
             shelter_rays: 10,
             shelter_fan: 60.0,
             shelter_reach: 12.0,
@@ -448,6 +467,15 @@ pub struct WhitecapTuning {
     /// How much the short waves riding on the sea count toward that
     /// steepness. At 1 every ripple breaks; at 0 only the main waves do.
     pub short_wave_share: f64,
+    /// The share of the open sea's whitecaps a completely shaded lee keeps.
+    /// A lee is a smaller sea, not a still one, so it is never quite white-
+    /// less; this is how much cover even the emptiest lee holds on to.
+    pub lee_foam_least: f64,
+    /// How fast that cover falls as the slope of the sea that is left drops
+    /// below the open sea's. At 1.76 it follows the wind sea's cover curve
+    /// (W ∝ H^1.76) as though the sea were that much smaller; 0 would keep
+    /// the open sea's cover everywhere, higher clears the lee sooner.
+    pub lee_foam_power: f64,
     /// How far "Foam amount" moves that threshold: at 0.15, full foam breaks
     /// waves 15% less steep and no foam needs them 15% steeper.
     pub foam_amount_sway: f64,
@@ -474,6 +502,8 @@ impl Default for WhitecapTuning {
             most_breaking: 0.02,
             softness: 0.06,
             short_wave_share: 0.4,
+            lee_foam_least: 0.1,
+            lee_foam_power: 1.76,
             foam_amount_sway: 0.15,
             trail_time: 0.3,
             trail_samples: 24,

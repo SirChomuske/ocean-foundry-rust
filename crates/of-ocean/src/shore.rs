@@ -158,6 +158,43 @@ fn eased(r: f64) -> f64 {
     r / (1.0 + r.powi(4)).powf(0.25)
 }
 
+/// Hold the crest delay from climbing faster than `slope` per block along
+/// `step`. One sweep can only compare a cell with the neighbour it has
+/// already passed, so the water is swept both ways and the pair is repeated:
+/// the second sweep moves the numbers the first was measured against.
+fn held_back(lag: &mut [f32], land: &[bool], step: isize, slope: f64) {
+    let count = lag.len() as isize;
+    if count == 0 || step == 0 || slope <= 0.0 {
+        return;
+    }
+    for _ in 0..4 {
+        for i in 0..count {
+            if land[i as usize] {
+                continue;
+            }
+            let prev = i - step;
+            if prev >= 0 && prev < count && !land[prev as usize] {
+                let upstream = lag[prev as usize] as f64;
+                if lag[i as usize] as f64 > upstream + slope {
+                    lag[i as usize] = (upstream + slope) as f32;
+                }
+            }
+        }
+        for i in (0..count).rev() {
+            if land[i as usize] {
+                continue;
+            }
+            let next = i + step;
+            if next >= 0 && next < count && !land[next as usize] {
+                let downstream = lag[next as usize] as f64;
+                if lag[i as usize] as f64 > downstream + slope {
+                    lag[i as usize] = (downstream + slope) as f32;
+                }
+            }
+        }
+    }
+}
+
 impl Shore {
     /// `tallest` is the height of the tallest waves of the open sea, in blocks.
     pub fn new(
@@ -286,48 +323,29 @@ impl Shore {
         // Where the delay changes fast along the run of the waves it pinches
         // the crests together, and the water just out of a passage comes out
         // shorter than the sea it came in from. Swell keeps its length through
-        // a gap, so the delay is held to a gentle slope along the run and left
-        // free to spread sideways, which bends the crests without shortening
-        // them.
+        // a gap, so the delay is held to a gentle slope along the run. Sideways
+        // it may bend the crests freely; but a step there rules a seam down the
+        // edge of the shadow, so it is held to a looser slope as well.
         let slope = tuning.arrival_slope.clamp(0.0, 0.9);
-        if slope > 0.0 && row > 1 && rows > 1 {
-            // Along the run of the waves, rounded to the grid: the crest
-            // delay is only allowed to climb or fall this much per block.
+        let side = tuning.arrival_side.clamp(0.0, 2.0);
+        if (slope > 0.0 || side > 0.0) && row > 1 && rows > 1 {
+            // Along the run of the waves, rounded to the grid, and the other
+            // grid axis, which is the way the crests bend sideways.
             let (hx, hz) = heading;
-            let step: isize = if hz.abs() >= hx.abs() {
-                if hz > 0.0 { row as isize } else { -(row as isize) }
-            } else if hx > 0.0 {
-                1
+            let (along, across): (isize, isize) = if hz.abs() >= hx.abs() {
+                (
+                    if hz > 0.0 { row as isize } else { -(row as isize) },
+                    1,
+                )
             } else {
-                -1
+                (if hx > 0.0 { 1 } else { -1 }, row as isize)
             };
-            // Both sweeps have to be repeated: the second one moves the
-            // values the first one was measured against.
-            for _ in 0..4 {
-                for i in 0..count {
-                    if land[i] {
-                        continue;
-                    }
-                    let prev = i as isize - step;
-                    if prev >= 0 && prev < count as isize && !land[prev as usize] {
-                        let upstream = lag[prev as usize] as f64;
-                        if lag[i] as f64 > upstream + slope {
-                            lag[i] = (upstream + slope) as f32;
-                        }
-                    }
-                }
-                for i in (0..count).rev() {
-                    if land[i] {
-                        continue;
-                    }
-                    let next = i as isize + step;
-                    if next >= 0 && next < count as isize && !land[next as usize] {
-                        let downstream = lag[next as usize] as f64;
-                        if lag[i] as f64 > downstream + slope {
-                            lag[i] = (downstream + slope) as f32;
-                        }
-                    }
-                }
+            // Each hold can only lower a cell, so a sweep along one axis may
+            // leave a step against the other; the two are swept in turn until
+            // neither can tighten, so both slopes hold at once.
+            for _ in 0..3 {
+                held_back(&mut lag, &land, along, slope);
+                held_back(&mut lag, &land, across, side);
             }
         }
         progress.step(span.0 + (span.1 - span.0) * 0.3).map_err(|p| p.key.to_string())?;

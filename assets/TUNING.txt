@@ -18,12 +18,12 @@ How to use it
     "Restore defaults" keeps the numbers it replaces in
     ocean-tuning.previous.json.
   - A part you leave out of the file uses its default. A file holding only
-    { "_version": 4, "reflection": { "cliff": 0 } } changes that one number.
+    { "_version": 10, "reflection": { "cliff": 0 } } changes that one number.
   - If the file cannot be read (a missing comma, a misspelt name), the app
     says what is wrong and on which line, and keeps the previous build.
   - Names must stay exactly as they are; only change the values.
   - The "_about" line is a note and is ignored.
-  - "_version" says which method the numbers were written for (now 4). When
+  - "_version" says which method the numbers were written for (now 10). When
     the method changes so much that old numbers no longer mean the same, the
     app sets an older file aside as ocean-tuning.previous.json, writes a
     fresh one and says so.
@@ -46,6 +46,9 @@ narrowing_at_calm   Extra narrowing of the peak when "Irregularity" is 0, so
 spread_at_calm      How narrowly the wave directions are bunched at
 spread_at_wild      Irregularity 0 and at 1. Larger is narrower: 300 gives
                     long straight crests, 4 a confused sea.
+spread_curve        How the wave directions bunch as Irregularity rises: 1
+                    is a straight line from calm to wild, 1.35 keeps a half
+                    irregular sea in long ridges instead of choppy patches.
 tail_from           The short waves "Swell detail" adds start at this
                     multiple of the main wave frequency.
 tail_energy         Share of the sea's energy in them at full Swell detail.
@@ -87,6 +90,11 @@ arrival_slope       The most the crest delay may change from block to block
                     along the run of the waves: 0.12 shortens a wave by about
                     a seventh and no more, so the sea keeps its length
                     through a narrow passage.
+arrival_side        The most the crest delay may change from block to block
+                    across the run of the waves: 0.35 spreads the edge of a
+                    wave shadow over about three blocks for every block of
+                    delay, so the crests bend instead of being cut off in a
+                    straight seam.
 shelter_rays        Shelter behind land is found by looking upwind along this
 shelter_fan         many lines, fanned out by this many degrees to each side,
 shelter_reach       up to this many main waves away.
@@ -260,6 +268,11 @@ most_breaking       However steep the sea, no more than this share of it
 softness            Range of steepness over which breaking sets in.
 short_wave_share    How much short waves count toward the steepness. At 1
                     every ripple breaks, at 0 only the main waves.
+lee_foam_least      The share of the open sea's whitecaps even a fully
+                    shaded lee keeps (0.1 keeps a tenth).
+lee_foam_power      How fast that cover falls as the slope of the sea that
+                    is left drops below the open sea's (1.76 follows the
+                    wind sea's W ∝ H^1.76 cover curve).
 foam_amount_sway    How far "Foam amount" moves the threshold.
 trail_time          How long foam lasts, in main wave periods.
 trail_samples       Past moments looked at to find that foam. More is

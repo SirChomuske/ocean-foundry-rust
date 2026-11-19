@@ -224,7 +224,8 @@ impl WaveField {
         // Directions: narrow for a regular swell, wide for a confused sea,
         // and always wider for the shorter waves.
         let (calm, wild) = (tuning.spread_at_calm.max(1.0), tuning.spread_at_wild.max(1.0));
-        let spread_peak = (calm.ln() + (wild.ln() - calm.ln()) * irregularity).exp();
+        let curve = irregularity.powf(tuning.spread_curve.clamp(0.2, 4.0));
+        let spread_peak = (calm.ln() + (wild.ln() - calm.ln()) * curve).exp();
         let heading = s.direction.to_radians();
         let mut waves = Vec::with_capacity(count);
         // Colour is read over an area, not block by block: waves much
@@ -395,6 +396,16 @@ impl WaveField {
     /// How much `steepness` varies over the open sea: its standard deviation.
     pub fn steepness_deviation(&self, short_share: f64) -> f64 {
         (self.waves.iter().map(|w| (w.amp * w.k * if w.long { 1.0 } else { short_share }).powi(2)).sum::<f64>() * 0.5).sqrt()
+    }
+
+    /// How much `steepness` varies here, where land has left the sea with
+    /// `near`. A sea whose swell is shaded keeps its wind waves, and those
+    /// are what break; the whitecap threshold of a shaded sea follows this
+    /// spread rather than the open sea's, which counts a swell that is not
+    /// there.
+    pub fn steepness_deviation_at(&self, near: &Near, short_share: f64) -> f64 {
+        let (long, short) = (near.long, near.short * short_share);
+        (self.waves.iter().map(|w| (w.amp * w.k * if w.long { long } else { short }).powi(2)).sum::<f64>() * 0.5).sqrt()
     }
 
     /// The lowest the water can ever be, relative to the resting level.
